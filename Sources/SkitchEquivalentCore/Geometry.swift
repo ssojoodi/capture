@@ -19,6 +19,35 @@ public extension CGRect {
     }
 }
 
+public struct ViewportTransform: Equatable {
+    public var zoom: CGFloat
+    public var imageOrigin: CGPoint
+
+    public init(zoom: CGFloat, imageOrigin: CGPoint) {
+        self.zoom = zoom
+        self.imageOrigin = imageOrigin
+    }
+
+    public func imagePoint(forViewPoint point: CGPoint) -> CGPoint {
+        CGPoint(x: (point.x - imageOrigin.x) / zoom, y: (point.y - imageOrigin.y) / zoom)
+    }
+
+    public func viewPoint(forImagePoint point: CGPoint) -> CGPoint {
+        CGPoint(x: point.x * zoom + imageOrigin.x, y: point.y * zoom + imageOrigin.y)
+    }
+
+    public func zoomed(to newZoom: CGFloat, aroundViewPoint focalPoint: CGPoint) -> ViewportTransform {
+        let imageFocalPoint = imagePoint(forViewPoint: focalPoint)
+        return ViewportTransform(
+            zoom: newZoom,
+            imageOrigin: CGPoint(
+                x: focalPoint.x - imageFocalPoint.x * newZoom,
+                y: focalPoint.y - imageFocalPoint.y * newZoom
+            )
+        )
+    }
+}
+
 public func distanceFromPointToSegment(_ point: CGPoint, _ start: CGPoint, _ end: CGPoint) -> CGFloat {
     let dx = end.x - start.x
     let dy = end.y - start.y

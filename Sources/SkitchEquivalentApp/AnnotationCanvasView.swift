@@ -2,7 +2,7 @@ import AppKit
 import UniformTypeIdentifiers
 import SkitchEquivalentCore
 
-final class AnnotationCanvasView: NSView {
+final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     private let state: AnnotationDocumentState
     private var zoom: CGFloat = 1
     private var imageOrigin: CGPoint = .zero
@@ -11,6 +11,8 @@ final class AnnotationCanvasView: NSView {
     private var activeCropRect: CGRect?
     private var movingAnnotation: Annotation?
     private var lastMovePoint: CGPoint?
+    private weak var activeTextField: NSTextField?
+    private weak var activeTextAnnotation: TextAnnotation?
     var statusHandler: ((String) -> Void)?
 
     init(state: AnnotationDocumentState) {
@@ -25,17 +27,76 @@ final class AnnotationCanvasView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
 
+    var zoomPercentage: Int { Int((zoom * 100).rounded()) }
+
+    func toolDidChange() {
+        commitActiveTextEdit()
+        window?.invalidateCursorRects(for: self)
+        needsDisplay = true
+    }
+
     func zoomToFit() {
         guard state.imageSize.width > 0, state.imageSize.height > 0 else { return }
-        let inset: CGFloat = 48
+        let inset: CGFloat = 72
         let available = bounds.insetBy(dx: inset, dy: inset).size
         zoom = max(0.05, min(available.width / state.imageSize.width, available.height / state.imageSize.height, 1))
         centerImage()
+        repositionActiveTextField()
+        needsDisplay = true
+        statusHandler?("Zoom: fit (\(zoomPercentage)%)")
+    }
+
+    func zoomIn() {
+        zoomBy(1.25)
+    }
+
+    func zoomOut() {
+        zoomBy(0.8)
+    }
+
+    func resetZoom() {
+        guard state.hasImage else { return }
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let viewport = ViewportTransform(zoom: zoom, imageOrigin: imageOrigin).zoomed(to: 1, aroundViewPoint: center)
+        zoom = viewport.zoom
+        imageOrigin = viewport.imageOrigin
+        repositionActiveTextField()
+        needsDisplay = true
+        statusHandler?("Zoom: 100%")
+    }
+
+    private func zoomBy(_ factor: CGFloat) {
+        guard state.hasImage else { return }
+        let nextZoom = min(8, max(0.05, zoom * factor))
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let viewport = ViewportTransform(zoom: zoom, imageOrigin: imageOrigin).zoomed(to: nextZoom, aroundViewPoint: center)
+        zoom = viewport.zoom
+        imageOrigin = viewport.imageOrigin
+        repositionActiveTextField()
+        needsDisplay = true
+        statusHandler?("Zoom: \(zoomPercentage)%")
     }
 
     override func layout() {
         super.layout()
-        centerImage()
+        if state.hasImage, zoom <= 1 {
+            centerImage()
+        }
+        repositionActiveTextField()
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        let cursor: NSCursor
+        switch state.selectedTool {
+        case .select:
+            cursor = .arrow
+        case .text:
+            cursor = .iBeam
+        case .arrow, .blur, .crop, .rectangle, .ellipse:
+            cursor = .crosshair
+        }
+        addCursorRect(bounds, cursor: cursor)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -61,6 +122,11 @@ final class AnnotationCanvasView: NSView {
             }
         }
 
+        if let activeAnnotation {
+            activeAnnotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
+            drawSelection(activeAnnotation.bounds, in: context)
+        }
+
         if let crop = activeCropRect ?? state.cropRect {
             drawCrop(crop, in: context)
         }
@@ -70,12 +136,7 @@ final class AnnotationCanvasView: NSView {
     private func drawPlaceholder(in rect: CGRect) {
         let cardWidth = min(bounds.width - 96, 680)
         let cardHeight: CGFloat = 220
-        let card = CGRect(
-            x: bounds.midX - cardWidth / 2,
-            y: bounds.midY - cardHeight / 2,
-            width: cardWidth,
-            height: cardHeight
-        )
+        let card = CGRect(x: bounds.midX - cardWidth / 2, y: bounds.midY - cardHeight / 2, width: cardWidth, height: cardHeight)
 
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.08)
@@ -112,27 +173,30 @@ final class AnnotationCanvasView: NSView {
     }
 
     private func drawSelection(_ rect: CGRect, in context: CGContext) {
+        guard rect.width > 0 || rect.height > 0 else { return }
         context.saveGState()
         context.setStrokeColor(NSColor.selectedControlColor.cgColor)
-        context.setLineWidth(2 / zoom)
-        context.setLineDash(phase: 0, lengths: [6 / zoom, 4 / zoom])
-        context.stroke(rect.insetBy(dx: -6 / zoom, dy: -6 / zoom))
+        context.setLineWidth(2 / max(zoom, 0.01))
+        context.setLineDash(phase: 0, lengths: [6 / max(zoom, 0.01), 4 / max(zoom, 0.01)])
+        context.stroke(rect.normalized.insetBy(dx: -6 / max(zoom, 0.01), dy: -6 / max(zoom, 0.01)))
         context.restoreGState()
     }
 
     private func drawCrop(_ rect: CGRect, in context: CGContext) {
+        let crop = rect.normalized
         context.saveGState()
         context.setStrokeColor(NSColor.systemYellow.cgColor)
-        context.setLineWidth(3 / zoom)
-        context.setLineDash(phase: 0, lengths: [10 / zoom, 5 / zoom])
-        context.stroke(rect)
+        context.setLineWidth(3 / max(zoom, 0.01))
+        context.setLineDash(phase: 0, lengths: [10 / max(zoom, 0.01), 5 / max(zoom, 0.01)])
+        context.stroke(crop)
         context.restoreGState()
     }
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        commitActiveTextEdit()
         guard state.hasImage else { return }
-        let point = imagePoint(for: event.locationInWindow)
+        let point = imagePoint(for: event.locationInWindow).clampedToImage(size: state.imageSize)
         dragStartImagePoint = point
         lastMovePoint = point
         activeAnnotation = nil
@@ -143,7 +207,7 @@ final class AnnotationCanvasView: NSView {
             let hit = state.annotation(at: point)
             state.selectedAnnotationID = hit?.id
             if event.clickCount >= 2, let text = hit as? TextAnnotation {
-                editTextAnnotation(text)
+                beginEditing(text)
                 needsDisplay = true
                 return
             }
@@ -156,9 +220,9 @@ final class AnnotationCanvasView: NSView {
         case .arrow:
             activeAnnotation = ArrowAnnotation(start: point, end: point)
         case .text:
-            let annotation = TextAnnotation(bounds: CGRect(x: point.x, y: point.y, width: 160, height: 56))
+            let annotation = TextAnnotation(bounds: CGRect(x: point.x, y: point.y, width: 190, height: 58))
             state.addAnnotation(annotation)
-            state.selectedTool = .select
+            beginEditing(annotation)
             statusHandler?("Added text annotation")
         case .blur:
             activeAnnotation = BlurAnnotation(bounds: CGRect(origin: point, size: .zero))
@@ -174,25 +238,56 @@ final class AnnotationCanvasView: NSView {
         needsDisplay = true
     }
 
-    private func editTextAnnotation(_ annotation: TextAnnotation) {
-        let alert = NSAlert()
-        alert.messageText = "Edit text"
-        alert.informativeText = "Keep it short for fast visual callouts."
+    private func beginEditing(_ annotation: TextAnnotation) {
+        activeTextField?.removeFromSuperview()
         let field = NSTextField(string: annotation.text)
-        field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        if alert.runModal() == .alertFirstButtonReturn {
-            let next = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !next.isEmpty { annotation.text = next }
-            statusHandler?("Updated text annotation")
+        field.font = .boldSystemFont(ofSize: max(16, annotation.fontSize * zoom))
+        field.textColor = annotation.textColor
+        field.backgroundColor = annotation.backgroundColor
+        field.drawsBackground = true
+        field.isBordered = false
+        field.alignment = .center
+        field.delegate = self
+        field.target = self
+        field.action = #selector(commitActiveTextEditAction(_:))
+        field.frame = viewRect(forImageRect: annotation.bounds)
+        addSubview(field)
+        activeTextField = field
+        activeTextAnnotation = annotation
+        window?.makeFirstResponder(field)
+    }
+
+    @objc private func commitActiveTextEditAction(_ sender: Any?) {
+        commitActiveTextEdit()
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        commitActiveTextEdit()
+    }
+
+    private func commitActiveTextEdit() {
+        guard let field = activeTextField else { return }
+        if let annotation = activeTextAnnotation {
+            let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                annotation.text = text
+            }
         }
+        field.removeFromSuperview()
+        activeTextField = nil
+        activeTextAnnotation = nil
+        needsDisplay = true
+    }
+
+    private func repositionActiveTextField() {
+        guard let field = activeTextField, let annotation = activeTextAnnotation else { return }
+        field.frame = viewRect(forImageRect: annotation.bounds)
+        field.font = .boldSystemFont(ofSize: max(16, annotation.fontSize * zoom))
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard state.hasImage, let start = dragStartImagePoint else { return }
-        let point = imagePoint(for: event.locationInWindow)
+        let point = imagePoint(for: event.locationInWindow).clampedToImage(size: state.imageSize)
 
         if let movingAnnotation, let lastMovePoint {
             movingAnnotation.moveBy(dx: point.x - lastMovePoint.x, dy: point.y - lastMovePoint.y)
@@ -224,11 +319,12 @@ final class AnnotationCanvasView: NSView {
 
         if let annotation = activeAnnotation, annotation.bounds.width > 4 || annotation.bounds.height > 4 {
             state.addAnnotation(annotation)
-            state.selectedTool = .select
-            statusHandler?("Added annotation")
-        } else if let crop = activeCropRect {
+            statusHandler?("Added \(state.selectedTool.rawValue) annotation")
+            return
+        }
+
+        if let crop = activeCropRect, crop.width > 4, crop.height > 4 {
             state.setCropRect(crop)
-            state.selectedTool = .select
             statusHandler?("Set crop region")
         }
     }
@@ -241,8 +337,8 @@ final class AnnotationCanvasView: NSView {
             needsDisplay = true
         } else if event.keyCode == 53 {
             state.selectedTool = .select
+            toolDidChange()
             statusHandler?("Tool: select")
-            needsDisplay = true
         } else {
             super.keyDown(with: event)
         }
@@ -281,6 +377,18 @@ final class AnnotationCanvasView: NSView {
 
     private func imagePoint(for windowPoint: CGPoint) -> CGPoint {
         let local = convert(windowPoint, from: nil)
-        return CGPoint(x: (local.x - imageOrigin.x) / zoom, y: (local.y - imageOrigin.y) / zoom)
+        return ViewportTransform(zoom: zoom, imageOrigin: imageOrigin).imagePoint(forViewPoint: local)
+    }
+
+    private func viewRect(forImageRect imageRect: CGRect) -> CGRect {
+        let normalized = imageRect.normalized
+        let origin = ViewportTransform(zoom: zoom, imageOrigin: imageOrigin).viewPoint(forImagePoint: normalized.origin)
+        return CGRect(x: origin.x, y: origin.y, width: normalized.width * zoom, height: normalized.height * zoom)
+    }
+}
+
+private extension CGPoint {
+    func clampedToImage(size: CGSize) -> CGPoint {
+        CGPoint(x: min(max(0, x), size.width), y: min(max(0, y), size.height))
     }
 }

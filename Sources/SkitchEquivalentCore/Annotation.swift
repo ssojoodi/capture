@@ -185,6 +185,52 @@ public final class EllipseAnnotation: Annotation {
     }
 }
 
+public enum BlurRenderer {
+    public static func blurredRegion(from baseImage: CGImage, imageSize: CGSize, rect imageRect: CGRect, radius: CGFloat) -> CGImage? {
+        let imageBounds = CGRect(origin: .zero, size: imageSize)
+        let normalized = imageRect.normalized.clamped(to: imageBounds).integral
+        guard !normalized.isNull, normalized.width >= 1, normalized.height >= 1 else { return nil }
+
+        let pixelRect = CGRect(
+            x: normalized.origin.x,
+            y: imageSize.height - normalized.maxY,
+            width: normalized.width,
+            height: normalized.height
+        ).integral.intersection(imageBounds)
+        guard !pixelRect.isNull, let crop = baseImage.cropping(to: pixelRect) else { return nil }
+
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let pixelSize = max(4, radius)
+        let sampleWidth = max(1, Int((normalized.width / pixelSize).rounded(.up)))
+        let sampleHeight = max(1, Int((normalized.height / pixelSize).rounded(.up)))
+        guard let sampleContext = CGContext(
+            data: nil,
+            width: sampleWidth,
+            height: sampleHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        sampleContext.interpolationQuality = .high
+        sampleContext.draw(crop, in: CGRect(x: 0, y: 0, width: sampleWidth, height: sampleHeight))
+        guard let sampledImage = sampleContext.makeImage() else { return nil }
+
+        guard let outputContext = CGContext(
+            data: nil,
+            width: Int(normalized.width),
+            height: Int(normalized.height),
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        outputContext.interpolationQuality = .none
+        outputContext.draw(sampledImage, in: CGRect(x: 0, y: 0, width: normalized.width, height: normalized.height))
+        return outputContext.makeImage()
+    }
+}
+
 public final class BlurAnnotation: Annotation {
     public let id: UUID
     public var bounds: CGRect { didSet { invalidateCache() } }
@@ -192,7 +238,7 @@ public final class BlurAnnotation: Annotation {
     private var cachedKey: String?
     private var cachedImage: CGImage?
 
-    public init(id: UUID = UUID(), bounds: CGRect, radius: CGFloat = 12) {
+    public init(id: UUID = UUID(), bounds: CGRect, radius: CGFloat = 16) {
         self.id = id
         self.bounds = bounds.normalized
         self.radius = radius
@@ -207,37 +253,25 @@ public final class BlurAnnotation: Annotation {
             return
         }
 
-        let pixelRect = CGRect(
-            x: bounds.origin.x,
-            y: imageSize.height - bounds.maxY,
-            width: bounds.width,
-            height: bounds.height
-        ).integral.intersection(CGRect(origin: .zero, size: imageSize))
-        guard let crop = baseImage.cropping(to: pixelRect), !pixelRect.isNull else { return }
-
-        let key = "\(Int(pixelRect.origin.x))-\(Int(pixelRect.origin.y))-\(Int(pixelRect.width))-\(Int(pixelRect.height))-\(radius)"
+        let normalized = bounds.normalized.clamped(to: CGRect(origin: .zero, size: imageSize)).integral
+        guard !normalized.isNull, normalized.width >= 1, normalized.height >= 1 else { return }
+        let key = "\(Int(normalized.origin.x))-\(Int(normalized.origin.y))-\(Int(normalized.width))-\(Int(normalized.height))-\(radius)"
         let blurred: CGImage
         if cachedKey == key, let cachedImage {
             blurred = cachedImage
-        } else {
-            let ciImage = CIImage(cgImage: crop).clampedToExtent()
-            let filter = CIFilter(name: "CIGaussianBlur")
-            filter?.setValue(ciImage, forKey: kCIInputImageKey)
-            filter?.setValue(radius, forKey: kCIInputRadiusKey)
-            guard let output = filter?.outputImage?.cropped(to: ciImage.extent) else { return }
-
-            let ciContext = CIContext(options: [.useSoftwareRenderer: false])
-            guard let rendered = ciContext.createCGImage(output, from: output.extent) else { return }
+        } else if let rendered = BlurRenderer.blurredRegion(from: baseImage, imageSize: imageSize, rect: normalized, radius: radius) {
             cachedKey = key
             cachedImage = rendered
             blurred = rendered
+        } else {
+            return
         }
 
         context.saveGState()
-        context.draw(blurred, in: bounds)
-        context.setStrokeColor(NSColor.systemRed.cgColor)
-        context.setLineWidth(3)
-        context.stroke(bounds)
+        context.draw(blurred, in: normalized)
+        context.setStrokeColor(NSColor.systemRed.withAlphaComponent(0.8).cgColor)
+        context.setLineWidth(max(2, 3 / max(scale, 1)))
+        context.stroke(normalized)
         context.restoreGState()
     }
 

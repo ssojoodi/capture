@@ -13,6 +13,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         static let paste = NSToolbarItem.Identifier("paste")
         static let copy = NSToolbarItem.Identifier("copy")
         static let export = NSToolbarItem.Identifier("export")
+        static let zoomIn = NSToolbarItem.Identifier("zoomIn")
+        static let zoomOut = NSToolbarItem.Identifier("zoomOut")
+        static let zoomFit = NSToolbarItem.Identifier("zoomFit")
     }
 
     init() {
@@ -53,6 +56,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
                 case "v": self.pasteImage(nil); return nil
                 case "c": self.copyFlattenedImage(nil); return nil
                 case "e": self.exportJPG(nil); return nil
+                case "+", "=": self.zoomIn(nil); return nil
+                case "-": self.zoomOut(nil); return nil
+                case "0": self.zoomToFit(nil); return nil
                 default: break
                 }
             }
@@ -62,8 +68,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             }
             if event.keyCode == 53 {
                 self.state.selectedTool = .select
+                self.canvasView.toolDidChange()
                 self.statusLabel.stringValue = "Tool: select"
-                self.canvasView.needsDisplay = true
                 return nil
             }
             return event
@@ -118,6 +124,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             NSToolbarItem.Identifier(Tool.rectangle.rawValue),
             NSToolbarItem.Identifier(Tool.ellipse.rawValue),
             .space,
+            ToolbarID.zoomOut,
+            ToolbarID.zoomIn,
+            ToolbarID.zoomFit,
+            .space,
             ToolbarID.copy,
             ToolbarID.export
         ]
@@ -137,6 +147,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             return toolbarItem(itemIdentifier, label: "Copy", symbol: "doc.on.doc", action: #selector(copyFlattenedImage(_:)))
         case ToolbarID.export:
             return toolbarItem(itemIdentifier, label: "Export JPG", symbol: "square.and.arrow.down", action: #selector(exportJPG(_:)))
+        case ToolbarID.zoomIn:
+            return toolbarItem(itemIdentifier, label: "Zoom In", symbol: "plus.magnifyingglass", action: #selector(zoomIn(_:)))
+        case ToolbarID.zoomOut:
+            return toolbarItem(itemIdentifier, label: "Zoom Out", symbol: "minus.magnifyingglass", action: #selector(zoomOut(_:)))
+        case ToolbarID.zoomFit:
+            return toolbarItem(itemIdentifier, label: "Fit", symbol: "arrow.up.left.and.down.right.magnifyingglass", action: #selector(zoomToFit(_:)))
         case NSToolbarItem.Identifier(Tool.select.rawValue):
             return toolbarItem(itemIdentifier, label: "Select", symbol: "cursorarrow", action: #selector(selectTool(_:)))
         case NSToolbarItem.Identifier(Tool.arrow.rawValue):
@@ -178,8 +194,20 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         }
         guard let raw, let tool = Tool(rawValue: raw) else { return }
         state.selectedTool = tool
+        canvasView.toolDidChange()
         statusLabel.stringValue = "Tool: \(tool.rawValue)"
-        canvasView.needsDisplay = true
+    }
+
+    @objc func zoomIn(_ sender: Any?) {
+        canvasView.zoomIn()
+    }
+
+    @objc func zoomOut(_ sender: Any?) {
+        canvasView.zoomOut()
+    }
+
+    @objc func zoomToFit(_ sender: Any?) {
+        canvasView.zoomToFit()
     }
 
     @objc func openImage(_ sender: Any?) {
@@ -238,8 +266,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
             state.selectedTool = .select
+            canvasView.toolDidChange()
             statusLabel.stringValue = "Tool: select"
-            canvasView.needsDisplay = true
         } else {
             super.keyDown(with: event)
         }
