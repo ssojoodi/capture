@@ -1,6 +1,19 @@
 import AppKit
 
 public final class AnnotationDocumentState {
+    private struct DocumentSnapshot {
+        let baseImage: NSImage?
+        let baseCGImage: CGImage?
+        let imageSize: CGSize
+        let annotations: [Annotation]
+        let cropRect: CGRect?
+        let selectedAnnotationID: UUID?
+    }
+
+    private let historyLimit = 50
+    private var undoStack: [DocumentSnapshot] = []
+    private var redoStack: [DocumentSnapshot] = []
+
     public private(set) var baseImage: NSImage?
     public private(set) var baseCGImage: CGImage?
     public private(set) var imageSize: CGSize = .zero
@@ -12,6 +25,8 @@ public final class AnnotationDocumentState {
     public init() {}
 
     public var hasImage: Bool { baseImage != nil }
+    public var canUndo: Bool { !undoStack.isEmpty }
+    public var canRedo: Bool { !redoStack.isEmpty }
 
     public func load(image: NSImage) {
         baseImage = image
@@ -25,11 +40,14 @@ public final class AnnotationDocumentState {
         cropRect = nil
         selectedAnnotationID = nil
         selectedTool = .select
+        undoStack.removeAll()
+        redoStack.removeAll()
     }
 
-    public func addAnnotation(_ annotation: Annotation) {
+    public func addAnnotation(_ annotation: Annotation, select: Bool = true) {
+        recordUndoSnapshot()
         annotations.append(annotation)
-        selectedAnnotationID = annotation.id
+        selectedAnnotationID = select ? annotation.id : nil
     }
 
     public func annotation(with id: UUID?) -> Annotation? {
@@ -43,11 +61,13 @@ public final class AnnotationDocumentState {
 
     public func deleteSelectedAnnotation() {
         guard let selectedAnnotationID else { return }
+        recordUndoSnapshot()
         annotations.removeAll { $0.id == selectedAnnotationID }
         self.selectedAnnotationID = nil
     }
 
     public func setCropRect(_ rect: CGRect?) {
+        recordUndoSnapshot()
         guard let rect else {
             cropRect = nil
             return
@@ -55,6 +75,68 @@ public final class AnnotationDocumentState {
         let imageBounds = CGRect(origin: .zero, size: imageSize)
         let clamped = rect.normalized.clamped(to: imageBounds)
         cropRect = clamped.isNull || clamped.isEmpty ? nil : clamped
+    }
+
+    public func applyCrop(_ rect: CGRect) {
+        let imageBounds = CGRect(origin: .zero, size: imageSize)
+        let clamped = rect.normalized.clamped(to: imageBounds)
+        guard !clamped.isNull, !clamped.isEmpty else { return }
+        recordUndoSnapshot()
+        cropRect = clamped
+        guard let croppedImage = flattenedImage(), let croppedCGImage = croppedImage.cgImageForRendering() else {
+            cropRect = nil
+            return
+        }
+        baseImage = croppedImage
+        baseCGImage = croppedCGImage
+        imageSize = CGSize(width: croppedCGImage.width, height: croppedCGImage.height)
+        annotations.removeAll()
+        cropRect = nil
+        selectedAnnotationID = nil
+    }
+
+    public func recordUndoSnapshot() {
+        undoStack.append(snapshot())
+        if undoStack.count > historyLimit {
+            undoStack.removeFirst(undoStack.count - historyLimit)
+        }
+        redoStack.removeAll()
+    }
+
+    @discardableResult
+    public func undo() -> Bool {
+        guard let previous = undoStack.popLast() else { return false }
+        redoStack.append(snapshot())
+        restore(previous)
+        return true
+    }
+
+    @discardableResult
+    public func redo() -> Bool {
+        guard let next = redoStack.popLast() else { return false }
+        undoStack.append(snapshot())
+        restore(next)
+        return true
+    }
+
+    private func snapshot() -> DocumentSnapshot {
+        DocumentSnapshot(
+            baseImage: baseImage,
+            baseCGImage: baseCGImage,
+            imageSize: imageSize,
+            annotations: annotations.map { $0.copyAnnotation() },
+            cropRect: cropRect,
+            selectedAnnotationID: selectedAnnotationID
+        )
+    }
+
+    private func restore(_ snapshot: DocumentSnapshot) {
+        baseImage = snapshot.baseImage
+        baseCGImage = snapshot.baseCGImage
+        imageSize = snapshot.imageSize
+        annotations = snapshot.annotations.map { $0.copyAnnotation() }
+        cropRect = snapshot.cropRect
+        selectedAnnotationID = snapshot.selectedAnnotationID
     }
 
     public func flattenedImage() -> NSImage? {

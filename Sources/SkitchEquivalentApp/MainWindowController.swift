@@ -13,6 +13,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         static let paste = NSToolbarItem.Identifier("paste")
         static let copy = NSToolbarItem.Identifier("copy")
         static let export = NSToolbarItem.Identifier("export")
+        static let undo = NSToolbarItem.Identifier("undo")
+        static let redo = NSToolbarItem.Identifier("redo")
         static let zoomIn = NSToolbarItem.Identifier("zoomIn")
         static let zoomOut = NSToolbarItem.Identifier("zoomOut")
         static let zoomFit = NSToolbarItem.Identifier("zoomFit")
@@ -56,6 +58,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
                 case "v": self.pasteImage(nil); return nil
                 case "c": self.copyFlattenedImage(nil); return nil
                 case "e": self.exportJPG(nil); return nil
+                case "z":
+                    if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.shift) {
+                        self.redo(nil)
+                    } else {
+                        self.undo(nil)
+                    }
+                    return nil
                 case "+", "=": self.zoomIn(nil); return nil
                 case "-": self.zoomOut(nil); return nil
                 case "0": self.zoomToFit(nil); return nil
@@ -124,6 +133,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             NSToolbarItem.Identifier(Tool.rectangle.rawValue),
             NSToolbarItem.Identifier(Tool.ellipse.rawValue),
             .space,
+            ToolbarID.undo,
+            ToolbarID.redo,
+            .space,
             ToolbarID.zoomOut,
             ToolbarID.zoomIn,
             ToolbarID.zoomFit,
@@ -147,6 +159,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             return toolbarItem(itemIdentifier, label: "Copy", symbol: "doc.on.doc", action: #selector(copyFlattenedImage(_:)))
         case ToolbarID.export:
             return toolbarItem(itemIdentifier, label: "Export JPG", symbol: "square.and.arrow.down", action: #selector(exportJPG(_:)))
+        case ToolbarID.undo:
+            return toolbarItem(itemIdentifier, label: "Undo", symbol: "arrow.uturn.backward", action: #selector(undo(_:)))
+        case ToolbarID.redo:
+            return toolbarItem(itemIdentifier, label: "Redo", symbol: "arrow.uturn.forward", action: #selector(redo(_:)))
         case ToolbarID.zoomIn:
             return toolbarItem(itemIdentifier, label: "Zoom In", symbol: "plus.magnifyingglass", action: #selector(zoomIn(_:)))
         case ToolbarID.zoomOut:
@@ -208,6 +224,24 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
 
     @objc func zoomToFit(_ sender: Any?) {
         canvasView.zoomToFit()
+    }
+
+    @objc func undo(_ sender: Any?) {
+        if state.undo() {
+            canvasView.needsDisplay = true
+            statusLabel.stringValue = "Undo"
+        } else {
+            statusLabel.stringValue = "Nothing to undo"
+        }
+    }
+
+    @objc func redo(_ sender: Any?) {
+        if state.redo() {
+            canvasView.needsDisplay = true
+            statusLabel.stringValue = "Redo"
+        } else {
+            statusLabel.stringValue = "Nothing to redo"
+        }
     }
 
     @objc func openImage(_ sender: Any?) {

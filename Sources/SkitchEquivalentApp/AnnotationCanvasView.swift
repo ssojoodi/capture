@@ -11,8 +11,10 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     private var activeCropRect: CGRect?
     private var movingAnnotation: Annotation?
     private var lastMovePoint: CGPoint?
+    private var recordedMoveUndo = false
     private weak var activeTextField: NSTextField?
     private weak var activeTextAnnotation: TextAnnotation?
+    private var activeTextWasNew = false
     var statusHandler: ((String) -> Void)?
 
     init(state: AnnotationDocumentState) {
@@ -117,9 +119,6 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
 
         for annotation in state.annotations {
             annotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
-            if annotation.id == state.selectedAnnotationID {
-                drawSelection(annotation.bounds, in: context)
-            }
         }
 
         if let activeAnnotation {
@@ -202,6 +201,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         activeAnnotation = nil
         activeCropRect = nil
         movingAnnotation = nil
+        recordedMoveUndo = false
 
         if state.selectedTool == .select {
             let hit = state.annotation(at: point)
@@ -221,8 +221,8 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             activeAnnotation = ArrowAnnotation(start: point, end: point)
         case .text:
             let annotation = TextAnnotation(bounds: CGRect(x: point.x, y: point.y, width: 190, height: 58))
-            state.addAnnotation(annotation)
-            beginEditing(annotation)
+            state.addAnnotation(annotation, select: false)
+            beginEditing(annotation, isNew: true)
             statusHandler?("Added text annotation")
         case .blur:
             activeAnnotation = BlurAnnotation(bounds: CGRect(origin: point, size: .zero))
@@ -238,7 +238,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         needsDisplay = true
     }
 
-    private func beginEditing(_ annotation: TextAnnotation) {
+    private func beginEditing(_ annotation: TextAnnotation, isNew: Bool = false) {
         activeTextField?.removeFromSuperview()
         let field = NSTextField(string: annotation.text)
         field.font = .boldSystemFont(ofSize: max(16, annotation.fontSize * zoom))
@@ -254,6 +254,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         addSubview(field)
         activeTextField = field
         activeTextAnnotation = annotation
+        activeTextWasNew = isNew
         window?.makeFirstResponder(field)
     }
 
@@ -269,13 +270,17 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         guard let field = activeTextField else { return }
         if let annotation = activeTextAnnotation {
             let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty {
+            if !text.isEmpty, text != annotation.text {
+                if !activeTextWasNew {
+                    state.recordUndoSnapshot()
+                }
                 annotation.text = text
             }
         }
         field.removeFromSuperview()
         activeTextField = nil
         activeTextAnnotation = nil
+        activeTextWasNew = false
         needsDisplay = true
     }
 
@@ -290,6 +295,10 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         let point = imagePoint(for: event.locationInWindow).clampedToImage(size: state.imageSize)
 
         if let movingAnnotation, let lastMovePoint {
+            if !recordedMoveUndo {
+                state.recordUndoSnapshot()
+                recordedMoveUndo = true
+            }
             movingAnnotation.moveBy(dx: point.x - lastMovePoint.x, dy: point.y - lastMovePoint.y)
             self.lastMovePoint = point
             needsDisplay = true
@@ -318,14 +327,15 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         }
 
         if let annotation = activeAnnotation, annotation.bounds.width > 4 || annotation.bounds.height > 4 {
-            state.addAnnotation(annotation)
+            state.addAnnotation(annotation, select: false)
             statusHandler?("Added \(state.selectedTool.rawValue) annotation")
             return
         }
 
         if let crop = activeCropRect, crop.width > 4, crop.height > 4 {
-            state.setCropRect(crop)
-            statusHandler?("Set crop region")
+            state.applyCrop(crop)
+            centerImage()
+            statusHandler?("Cropped image")
         }
     }
 
@@ -334,6 +344,20 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 51 {
             state.deleteSelectedAnnotation()
+            needsDisplay = true
+        } else if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command),
+                  let key = event.charactersIgnoringModifiers?.lowercased(),
+                  key == "z" {
+            if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.shift) {
+                _ = state.redo()
+                statusHandler?("Redo")
+            } else {
+                _ = state.undo()
+                statusHandler?("Undo")
+            }
+            activeAnnotation = nil
+            activeCropRect = nil
+            repositionActiveTextField()
             needsDisplay = true
         } else if event.keyCode == 53 {
             state.selectedTool = .select

@@ -7,6 +7,7 @@ public protocol Annotation: AnyObject {
     func draw(in context: CGContext, baseImage: CGImage?, imageSize: CGSize, scale: CGFloat)
     func hitTest(_ point: CGPoint) -> Bool
     func moveBy(dx: CGFloat, dy: CGFloat)
+    func copyAnnotation() -> Annotation
 }
 
 public final class ArrowAnnotation: Annotation {
@@ -66,6 +67,10 @@ public final class ArrowAnnotation: Annotation {
         end.x += dx
         end.y += dy
     }
+
+    public func copyAnnotation() -> Annotation {
+        ArrowAnnotation(id: id, start: start, end: end, color: color, strokeWidth: strokeWidth)
+    }
 }
 
 public final class TextAnnotation: Annotation {
@@ -115,6 +120,10 @@ public final class TextAnnotation: Annotation {
         bounds.origin.x += dx
         bounds.origin.y += dy
     }
+
+    public func copyAnnotation() -> Annotation {
+        TextAnnotation(id: id, bounds: bounds, text: text, fontSize: fontSize, textColor: textColor, backgroundColor: backgroundColor)
+    }
 }
 
 public final class RectangleAnnotation: Annotation {
@@ -145,6 +154,10 @@ public final class RectangleAnnotation: Annotation {
     public func moveBy(dx: CGFloat, dy: CGFloat) {
         bounds.origin.x += dx
         bounds.origin.y += dy
+    }
+
+    public func copyAnnotation() -> Annotation {
+        RectangleAnnotation(id: id, bounds: bounds, strokeColor: strokeColor, strokeWidth: strokeWidth)
     }
 }
 
@@ -182,6 +195,10 @@ public final class EllipseAnnotation: Annotation {
     public func moveBy(dx: CGFloat, dy: CGFloat) {
         bounds.origin.x += dx
         bounds.origin.y += dy
+    }
+
+    public func copyAnnotation() -> Annotation {
+        EllipseAnnotation(id: id, bounds: bounds, strokeColor: strokeColor, strokeWidth: strokeWidth)
     }
 }
 
@@ -269,9 +286,6 @@ public final class BlurAnnotation: Annotation {
 
         context.saveGState()
         context.draw(blurred, in: normalized)
-        context.setStrokeColor(NSColor.systemRed.withAlphaComponent(0.8).cgColor)
-        context.setLineWidth(max(2, 3 / max(scale, 1)))
-        context.stroke(normalized)
         context.restoreGState()
     }
 
@@ -287,5 +301,9 @@ public final class BlurAnnotation: Annotation {
     public func moveBy(dx: CGFloat, dy: CGFloat) {
         bounds.origin.x += dx
         bounds.origin.y += dy
+    }
+
+    public func copyAnnotation() -> Annotation {
+        BlurAnnotation(id: id, bounds: bounds, radius: radius)
     }
 }

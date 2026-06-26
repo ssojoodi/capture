@@ -67,6 +67,54 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertLessThan(brightness, 0.92)
     }
 
+    func testUndoRemovesMostRecentCommittedOperationAndRedoRestoresIt() {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 200, height: 200, color: .white))
+        state.addAnnotation(RectangleAnnotation(bounds: CGRect(x: 10, y: 10, width: 80, height: 60)))
+        state.addAnnotation(EllipseAnnotation(bounds: CGRect(x: 40, y: 30, width: 70, height: 50)))
+
+        XCTAssertTrue(state.canUndo)
+        XCTAssertTrue(state.undo())
+        XCTAssertEqual(state.annotations.count, 1)
+        XCTAssertTrue(state.annotations.first is RectangleAnnotation)
+        XCTAssertTrue(state.canRedo)
+
+        XCTAssertTrue(state.redo())
+        XCTAssertEqual(state.annotations.count, 2)
+        XCTAssertTrue(state.annotations.last is EllipseAnnotation)
+    }
+
+    func testNewEditAfterUndoClearsRedo() {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 200, height: 200, color: .white))
+        state.addAnnotation(RectangleAnnotation(bounds: CGRect(x: 10, y: 10, width: 80, height: 60)))
+        state.addAnnotation(EllipseAnnotation(bounds: CGRect(x: 40, y: 30, width: 70, height: 50)))
+        XCTAssertTrue(state.undo())
+        XCTAssertTrue(state.canRedo)
+
+        state.addAnnotation(ArrowAnnotation(start: CGPoint(x: 20, y: 20), end: CGPoint(x: 140, y: 80)))
+        XCTAssertFalse(state.canRedo)
+        XCTAssertFalse(state.redo())
+        XCTAssertTrue(state.annotations.last is ArrowAnnotation)
+    }
+
+    func testApplyCropImmediatelyChangesWorkingImageDimensionsAndUndoRestoresThem() throws {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 240, height: 180, color: .white))
+        state.addAnnotation(RectangleAnnotation(bounds: CGRect(x: 20, y: 20, width: 80, height: 60)))
+
+        state.applyCrop(CGRect(x: 40, y: 30, width: 90, height: 70))
+        XCTAssertEqual(state.imageSize, CGSize(width: 90, height: 70))
+        XCTAssertNil(state.cropRect)
+        XCTAssertEqual(state.annotations.count, 0)
+        let flattened = try XCTUnwrap(state.flattenedImage())
+        XCTAssertEqual(flattened.size, NSSize(width: 90, height: 70))
+
+        XCTAssertTrue(state.undo())
+        XCTAssertEqual(state.imageSize, CGSize(width: 240, height: 180))
+        XCTAssertEqual(state.annotations.count, 1)
+    }
+
     func testViewportTransformRoundTripsImageAndViewCoordinates() {
         let viewport = ViewportTransform(zoom: 2.5, imageOrigin: CGPoint(x: 40, y: 80))
         let imagePoint = CGPoint(x: 120, y: 44)
