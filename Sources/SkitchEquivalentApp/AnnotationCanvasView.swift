@@ -243,8 +243,8 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         let field = NSTextField(string: annotation.text)
         field.font = .boldSystemFont(ofSize: max(16, annotation.fontSize * zoom))
         field.textColor = annotation.textColor
-        field.backgroundColor = annotation.backgroundColor
-        field.drawsBackground = true
+        field.backgroundColor = annotation.drawsBackground ? annotation.backgroundColor : .clear
+        field.drawsBackground = annotation.drawsBackground
         field.isBordered = false
         field.alignment = .center
         field.delegate = self

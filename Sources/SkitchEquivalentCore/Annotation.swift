@@ -34,24 +34,45 @@ public final class ArrowAnnotation: Annotation {
     }
 
     public func draw(in context: CGContext, baseImage: CGImage?, imageSize: CGSize, scale: CGFloat) {
-        context.saveGState()
-        context.setStrokeColor(color.cgColor)
-        context.setFillColor(color.cgColor)
-        context.setLineCap(.round)
-        context.setLineJoin(.round)
-        context.setLineWidth(strokeWidth)
-        context.move(to: start)
-        context.addLine(to: end)
-        context.strokePath()
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let length = hypot(dx, dy)
+        guard length >= 2 else { return }
 
-        let angle = atan2(end.y - start.y, end.x - start.x)
-        let headLength = max(20, strokeWidth * 4)
-        let wingAngle = CGFloat.pi / 7
-        let p1 = CGPoint(x: end.x - headLength * cos(angle - wingAngle), y: end.y - headLength * sin(angle - wingAngle))
-        let p2 = CGPoint(x: end.x - headLength * cos(angle + wingAngle), y: end.y - headLength * sin(angle + wingAngle))
-        context.move(to: end)
-        context.addLine(to: p1)
-        context.addLine(to: p2)
+        let ux = dx / length
+        let uy = dy / length
+        let px = -uy
+        let py = ux
+        let shaftWidth = max(14, strokeWidth * 2.2)
+        let tailWidth = shaftWidth * 0.72
+        let headLength = min(max(34, shaftWidth * 3.2), length * 0.55)
+        let headWidth = shaftWidth * 3.35
+        let neck = CGPoint(x: end.x - ux * headLength, y: end.y - uy * headLength)
+        let tailCapInset = min(length * 0.18, tailWidth * 0.5)
+        let tailCenter = CGPoint(x: start.x + ux * tailCapInset, y: start.y + uy * tailCapInset)
+
+        let tailLeft = CGPoint(x: tailCenter.x + px * tailWidth / 2, y: tailCenter.y + py * tailWidth / 2)
+        let tailRight = CGPoint(x: tailCenter.x - px * tailWidth / 2, y: tailCenter.y - py * tailWidth / 2)
+        let neckLeft = CGPoint(x: neck.x + px * shaftWidth / 2, y: neck.y + py * shaftWidth / 2)
+        let neckRight = CGPoint(x: neck.x - px * shaftWidth / 2, y: neck.y - py * shaftWidth / 2)
+        let headLeft = CGPoint(x: neck.x + px * headWidth / 2, y: neck.y + py * headWidth / 2)
+        let headRight = CGPoint(x: neck.x - px * headWidth / 2, y: neck.y - py * headWidth / 2)
+        let tailControlLeft = CGPoint(x: start.x + px * tailWidth / 2, y: start.y + py * tailWidth / 2)
+        let tailControlRight = CGPoint(x: start.x - px * tailWidth / 2, y: start.y - py * tailWidth / 2)
+
+        context.saveGState()
+        context.setFillColor(color.cgColor)
+        context.move(to: tailLeft)
+        context.addLine(to: neckLeft)
+        context.addLine(to: headLeft)
+        context.addLine(to: end)
+        context.addLine(to: headRight)
+        context.addLine(to: neckRight)
+        context.addLine(to: tailRight)
+        context.addQuadCurve(to: tailLeft, control: CGPoint(
+            x: (tailControlLeft.x + tailControlRight.x) / 2 - ux * tailWidth * 0.45,
+            y: (tailControlLeft.y + tailControlRight.y) / 2 - uy * tailWidth * 0.45
+        ))
         context.closePath()
         context.fillPath()
         context.restoreGState()
@@ -80,23 +101,35 @@ public final class TextAnnotation: Annotation {
     public var fontSize: CGFloat
     public var textColor: NSColor
     public var backgroundColor: NSColor
+    public var drawsBackground: Bool
 
-    public init(id: UUID = UUID(), bounds: CGRect, text: String = "Text", fontSize: CGFloat = 32, textColor: NSColor = .white, backgroundColor: NSColor = .systemRed) {
+    public init(
+        id: UUID = UUID(),
+        bounds: CGRect,
+        text: String = "Text",
+        fontSize: CGFloat = 32,
+        textColor: NSColor = .systemRed,
+        backgroundColor: NSColor = .systemRed,
+        drawsBackground: Bool = false
+    ) {
         self.id = id
         self.bounds = bounds.normalized
         self.text = text
         self.fontSize = fontSize
         self.textColor = textColor
         self.backgroundColor = backgroundColor
+        self.drawsBackground = drawsBackground
     }
 
     public func draw(in context: CGContext, baseImage: CGImage?, imageSize: CGSize, scale: CGFloat) {
-        context.saveGState()
-        context.setFillColor(backgroundColor.cgColor)
-        let radius = min(10, bounds.height / 4)
-        context.addPath(CGPath(roundedRect: bounds, cornerWidth: radius, cornerHeight: radius, transform: nil))
-        context.fillPath()
-        context.restoreGState()
+        if drawsBackground {
+            context.saveGState()
+            context.setFillColor(backgroundColor.cgColor)
+            let radius = min(10, bounds.height / 4)
+            context.addPath(CGPath(roundedRect: bounds, cornerWidth: radius, cornerHeight: radius, transform: nil))
+            context.fillPath()
+            context.restoreGState()
+        }
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
@@ -122,7 +155,7 @@ public final class TextAnnotation: Annotation {
     }
 
     public func copyAnnotation() -> Annotation {
-        TextAnnotation(id: id, bounds: bounds, text: text, fontSize: fontSize, textColor: textColor, backgroundColor: backgroundColor)
+        TextAnnotation(id: id, bounds: bounds, text: text, fontSize: fontSize, textColor: textColor, backgroundColor: backgroundColor, drawsBackground: drawsBackground)
     }
 }
 

@@ -9,6 +9,22 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertFalse(arrow.hitTest(CGPoint(x: 50, y: 60)))
     }
 
+    func testTextAnnotationDefaultsToTransparentBackgroundAndReadableColor() {
+        let text = TextAnnotation(bounds: CGRect(x: 10, y: 10, width: 120, height: 48))
+        XCTAssertFalse(text.drawsBackground)
+        XCTAssertEqual(text.textColor.usingColorSpace(.sRGB), NSColor.systemRed.usingColorSpace(.sRGB))
+    }
+
+    func testTextRenderingStillChangesPixelsWithoutBackground() throws {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 220, height: 120, color: .white))
+        state.addAnnotation(TextAnnotation(bounds: CGRect(x: 20, y: 24, width: 180, height: 70), text: "A", fontSize: 54))
+        let flattened = try XCTUnwrap(state.flattenedImage())
+        XCTAssertGreaterThan(flattened.countNonWhitePixels(), 20)
+        let corner = try XCTUnwrap(flattened.sampleColor(x: 22, y: 26))
+        XCTAssertEqual(corner.brightnessComponent, 1, accuracy: 0.001)
+    }
+
     func testAnnotationOrderingReturnsTopmostHit() {
         let state = AnnotationDocumentState()
         state.load(image: solidImage(width: 200, height: 200, color: .white))
@@ -163,5 +179,20 @@ private extension NSImage {
         guard let cgImage = cgImageForRendering() else { return nil }
         let rep = NSBitmapImageRep(cgImage: cgImage)
         return rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB)
+    }
+
+    func countNonWhitePixels() -> Int {
+        guard let cgImage = cgImageForRendering() else { return 0 }
+        let rep = NSBitmapImageRep(cgImage: cgImage)
+        var count = 0
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide {
+                guard let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                if color.redComponent < 0.98 || color.greenComponent < 0.98 || color.blueComponent < 0.98 {
+                    count += 1
+                }
+            }
+        }
+        return count
     }
 }
