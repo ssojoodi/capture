@@ -15,6 +15,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         static let export = NSToolbarItem.Identifier("export")
         static let undo = NSToolbarItem.Identifier("undo")
         static let redo = NSToolbarItem.Identifier("redo")
+        static let color = NSToolbarItem.Identifier("color")
+        static let thickness = NSToolbarItem.Identifier("thickness")
         static let zoomIn = NSToolbarItem.Identifier("zoomIn")
         static let zoomOut = NSToolbarItem.Identifier("zoomOut")
         static let zoomFit = NSToolbarItem.Identifier("zoomFit")
@@ -136,6 +138,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             ToolbarID.undo,
             ToolbarID.redo,
             .space,
+            ToolbarID.color,
+            ToolbarID.thickness,
+            .space,
             ToolbarID.zoomOut,
             ToolbarID.zoomIn,
             ToolbarID.zoomFit,
@@ -163,6 +168,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             return toolbarItem(itemIdentifier, label: "Undo", symbol: "arrow.uturn.backward", action: #selector(undo(_:)))
         case ToolbarID.redo:
             return toolbarItem(itemIdentifier, label: "Redo", symbol: "arrow.uturn.forward", action: #selector(redo(_:)))
+        case ToolbarID.color:
+            return colorToolbarItem(itemIdentifier)
+        case ToolbarID.thickness:
+            return thicknessToolbarItem(itemIdentifier)
         case ToolbarID.zoomIn:
             return toolbarItem(itemIdentifier, label: "Zoom In", symbol: "plus.magnifyingglass", action: #selector(zoomIn(_:)))
         case ToolbarID.zoomOut:
@@ -199,6 +208,35 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         return item
     }
 
+    private func colorToolbarItem(_ identifier: NSToolbarItem.Identifier) -> NSToolbarItem {
+        let item = NSToolbarItem(itemIdentifier: identifier)
+        item.label = "Color"
+        item.paletteLabel = "Color"
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 96, height: 28), pullsDown: false)
+        for captureColor in CapturePalette.all {
+            popup.addItem(withTitle: captureColor.name)
+        }
+        popup.target = self
+        popup.action = #selector(selectColor(_:))
+        item.view = popup
+        item.minSize = NSSize(width: 96, height: 28)
+        item.maxSize = NSSize(width: 116, height: 28)
+        return item
+    }
+
+    private func thicknessToolbarItem(_ identifier: NSToolbarItem.Identifier) -> NSToolbarItem {
+        let item = NSToolbarItem(itemIdentifier: identifier)
+        item.label = "Thickness"
+        item.paletteLabel = "Thickness"
+        let control = NSSegmentedControl(labels: ["S", "M", "L"], trackingMode: .selectOne, target: self, action: #selector(selectThickness(_:)))
+        control.frame = NSRect(x: 0, y: 0, width: 86, height: 28)
+        control.selectedSegment = 1
+        item.view = control
+        item.minSize = NSSize(width: 86, height: 28)
+        item.maxSize = NSSize(width: 96, height: 28)
+        return item
+    }
+
     @objc func selectTool(_ sender: Any?) {
         let raw: String?
         if let item = sender as? NSToolbarItem {
@@ -224,6 +262,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
 
     @objc func zoomToFit(_ sender: Any?) {
         canvasView.zoomToFit()
+    }
+
+    @objc func selectColor(_ sender: NSPopUpButton) {
+        let index = sender.indexOfSelectedItem
+        guard CapturePalette.all.indices.contains(index) else { return }
+        canvasView.applySelectedColor(CapturePalette.all[index].color)
+    }
+
+    @objc func selectThickness(_ sender: NSSegmentedControl) {
+        let thicknesses: [CGFloat] = [4, 8, 14]
+        let index = sender.selectedSegment
+        guard thicknesses.indices.contains(index) else { return }
+        canvasView.applySelectedThickness(thicknesses[index])
     }
 
     @objc func undo(_ sender: Any?) {

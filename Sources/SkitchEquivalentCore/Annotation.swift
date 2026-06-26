@@ -1,6 +1,113 @@
 import AppKit
 import CoreImage
 
+public struct CaptureColor: Equatable {
+    public let name: String
+    public let color: NSColor
+
+    public init(name: String, color: NSColor) {
+        self.name = name
+        self.color = color
+    }
+
+    public static func == (lhs: CaptureColor, rhs: CaptureColor) -> Bool {
+        lhs.name == rhs.name
+    }
+}
+
+public enum CapturePalette {
+    public static let softRed = NSColor(calibratedRed: 0.93, green: 0.24, blue: 0.42, alpha: 1)
+    public static let softBlue = NSColor(calibratedRed: 0.22, green: 0.48, blue: 0.86, alpha: 1)
+    public static let softGreen = NSColor(calibratedRed: 0.22, green: 0.64, blue: 0.42, alpha: 1)
+    public static let softOrange = NSColor(calibratedRed: 0.94, green: 0.50, blue: 0.23, alpha: 1)
+    public static let softYellow = NSColor(calibratedRed: 0.95, green: 0.78, blue: 0.22, alpha: 1)
+    public static let softWhite = NSColor(calibratedWhite: 0.98, alpha: 1)
+    public static let softBlack = NSColor(calibratedWhite: 0.12, alpha: 1)
+
+    public static let all: [CaptureColor] = [
+        CaptureColor(name: "Red", color: softRed),
+        CaptureColor(name: "Blue", color: softBlue),
+        CaptureColor(name: "Green", color: softGreen),
+        CaptureColor(name: "Orange", color: softOrange),
+        CaptureColor(name: "Yellow", color: softYellow),
+        CaptureColor(name: "White", color: softWhite),
+        CaptureColor(name: "Black", color: softBlack)
+    ]
+}
+
+public enum SelectionHandle: CaseIterable, Equatable {
+    case topLeft
+    case top
+    case topRight
+    case right
+    case bottomRight
+    case bottom
+    case bottomLeft
+    case left
+    case arrowStart
+    case arrowEnd
+}
+
+public enum AnnotationSelectionGeometry {
+    public static func handleCenters(for annotation: Annotation) -> [(SelectionHandle, CGPoint)] {
+        if let arrow = annotation as? ArrowAnnotation {
+            return [(.arrowStart, arrow.start), (.arrowEnd, arrow.end)]
+        }
+
+        let rect = annotation.bounds.normalized
+        return [
+            (.topLeft, CGPoint(x: rect.minX, y: rect.maxY)),
+            (.top, CGPoint(x: rect.midX, y: rect.maxY)),
+            (.topRight, CGPoint(x: rect.maxX, y: rect.maxY)),
+            (.right, CGPoint(x: rect.maxX, y: rect.midY)),
+            (.bottomRight, CGPoint(x: rect.maxX, y: rect.minY)),
+            (.bottom, CGPoint(x: rect.midX, y: rect.minY)),
+            (.bottomLeft, CGPoint(x: rect.minX, y: rect.minY)),
+            (.left, CGPoint(x: rect.minX, y: rect.midY))
+        ]
+    }
+
+    public static func hitHandle(at point: CGPoint, annotation: Annotation, hitRadius: CGFloat) -> SelectionHandle? {
+        handleCenters(for: annotation).first { _, center in
+            hypot(point.x - center.x, point.y - center.y) <= hitRadius
+        }?.0
+    }
+
+    public static func resizedRect(_ rect: CGRect, moving handle: SelectionHandle, to point: CGPoint, minimumSize: CGFloat = 12) -> CGRect {
+        var minX = rect.normalized.minX
+        var maxX = rect.normalized.maxX
+        var minY = rect.normalized.minY
+        var maxY = rect.normalized.maxY
+
+        switch handle {
+        case .topLeft:
+            minX = min(point.x, maxX - minimumSize)
+            maxY = max(point.y, minY + minimumSize)
+        case .top:
+            maxY = max(point.y, minY + minimumSize)
+        case .topRight:
+            maxX = max(point.x, minX + minimumSize)
+            maxY = max(point.y, minY + minimumSize)
+        case .right:
+            maxX = max(point.x, minX + minimumSize)
+        case .bottomRight:
+            maxX = max(point.x, minX + minimumSize)
+            minY = min(point.y, maxY - minimumSize)
+        case .bottom:
+            minY = min(point.y, maxY - minimumSize)
+        case .bottomLeft:
+            minX = min(point.x, maxX - minimumSize)
+            minY = min(point.y, maxY - minimumSize)
+        case .left:
+            minX = min(point.x, maxX - minimumSize)
+        case .arrowStart, .arrowEnd:
+            break
+        }
+
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY).normalized
+    }
+}
+
 public protocol Annotation: AnyObject {
     var id: UUID { get }
     var bounds: CGRect { get set }
@@ -25,7 +132,7 @@ public final class ArrowAnnotation: Annotation {
         }
     }
 
-    public init(id: UUID = UUID(), start: CGPoint, end: CGPoint, color: NSColor = .systemRed, strokeWidth: CGFloat = 8) {
+    public init(id: UUID = UUID(), start: CGPoint, end: CGPoint, color: NSColor = CapturePalette.softRed, strokeWidth: CGFloat = 8) {
         self.id = id
         self.start = start
         self.end = end
@@ -108,8 +215,8 @@ public final class TextAnnotation: Annotation {
         bounds: CGRect,
         text: String = "Text",
         fontSize: CGFloat = 32,
-        textColor: NSColor = .systemRed,
-        backgroundColor: NSColor = .systemRed,
+        textColor: NSColor = CapturePalette.softRed,
+        backgroundColor: NSColor = CapturePalette.softRed,
         drawsBackground: Bool = false
     ) {
         self.id = id
@@ -165,7 +272,7 @@ public final class RectangleAnnotation: Annotation {
     public var strokeColor: NSColor
     public var strokeWidth: CGFloat
 
-    public init(id: UUID = UUID(), bounds: CGRect, strokeColor: NSColor = .systemRed, strokeWidth: CGFloat = 6) {
+    public init(id: UUID = UUID(), bounds: CGRect, strokeColor: NSColor = CapturePalette.softRed, strokeWidth: CGFloat = 6) {
         self.id = id
         self.bounds = bounds.normalized
         self.strokeColor = strokeColor
@@ -200,7 +307,7 @@ public final class EllipseAnnotation: Annotation {
     public var strokeColor: NSColor
     public var strokeWidth: CGFloat
 
-    public init(id: UUID = UUID(), bounds: CGRect, strokeColor: NSColor = .systemRed, strokeWidth: CGFloat = 6) {
+    public init(id: UUID = UUID(), bounds: CGRect, strokeColor: NSColor = CapturePalette.softRed, strokeWidth: CGFloat = 6) {
         self.id = id
         self.bounds = bounds.normalized
         self.strokeColor = strokeColor

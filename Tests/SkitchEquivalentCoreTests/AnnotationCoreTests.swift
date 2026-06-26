@@ -12,7 +12,7 @@ final class AnnotationCoreTests: XCTestCase {
     func testTextAnnotationDefaultsToTransparentBackgroundAndReadableColor() {
         let text = TextAnnotation(bounds: CGRect(x: 10, y: 10, width: 120, height: 48))
         XCTAssertFalse(text.drawsBackground)
-        XCTAssertEqual(text.textColor.usingColorSpace(.sRGB), NSColor.systemRed.usingColorSpace(.sRGB))
+        XCTAssertEqual(text.textColor.usingColorSpace(.sRGB), CapturePalette.softRed.usingColorSpace(.sRGB))
     }
 
     func testTextRenderingStillChangesPixelsWithoutBackground() throws {
@@ -23,6 +23,57 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertGreaterThan(flattened.countNonWhitePixels(), 20)
         let corner = try XCTUnwrap(flattened.sampleColor(x: 22, y: 26))
         XCTAssertEqual(corner.brightnessComponent, 1, accuracy: 0.001)
+    }
+
+    func testSelectionHandleGeometryForRectangle() {
+        let rectangle = RectangleAnnotation(bounds: CGRect(x: 20, y: 30, width: 100, height: 80))
+        let handles = Dictionary(uniqueKeysWithValues: AnnotationSelectionGeometry.handleCenters(for: rectangle))
+        XCTAssertEqual(handles[.topLeft], CGPoint(x: 20, y: 110))
+        XCTAssertEqual(handles[.right], CGPoint(x: 120, y: 70))
+        XCTAssertEqual(AnnotationSelectionGeometry.hitHandle(at: CGPoint(x: 121, y: 69), annotation: rectangle, hitRadius: 5), .right)
+    }
+
+    func testArrowEndpointHandleHitTesting() {
+        let arrow = ArrowAnnotation(start: CGPoint(x: 10, y: 20), end: CGPoint(x: 100, y: 140))
+        XCTAssertEqual(AnnotationSelectionGeometry.hitHandle(at: CGPoint(x: 12, y: 22), annotation: arrow, hitRadius: 6), .arrowStart)
+        XCTAssertEqual(AnnotationSelectionGeometry.hitHandle(at: CGPoint(x: 98, y: 138), annotation: arrow, hitRadius: 6), .arrowEnd)
+        XCTAssertNil(AnnotationSelectionGeometry.hitHandle(at: CGPoint(x: 50, y: 50), annotation: arrow, hitRadius: 6))
+    }
+
+    func testResizingRectangleHandleUpdatesBoundsPredictably() {
+        let rect = CGRect(x: 20, y: 30, width: 100, height: 80)
+        let resized = AnnotationSelectionGeometry.resizedRect(rect, moving: .bottomRight, to: CGPoint(x: 150, y: 10))
+        XCTAssertEqual(resized, CGRect(x: 20, y: 10, width: 130, height: 100))
+    }
+
+    func testStateCanResizeArrowEndpointAndUndoIt() {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 200, height: 200, color: .white))
+        let arrow = ArrowAnnotation(start: CGPoint(x: 20, y: 20), end: CGPoint(x: 100, y: 100))
+        state.addAnnotation(arrow)
+        XCTAssertTrue(state.resizeSelected(handle: .arrowEnd, to: CGPoint(x: 160, y: 80)))
+        XCTAssertEqual(arrow.end, CGPoint(x: 160, y: 80))
+        XCTAssertTrue(state.undo())
+        let restored = state.annotations.first as? ArrowAnnotation
+        XCTAssertEqual(restored?.end, CGPoint(x: 100, y: 100))
+    }
+
+    func testColorAndThicknessApplyToSelectedAnnotationAndUndo() {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 200, height: 200, color: .white))
+        let rectangle = RectangleAnnotation(bounds: CGRect(x: 20, y: 30, width: 100, height: 80))
+        state.addAnnotation(rectangle)
+        XCTAssertTrue(state.applyColorToSelected(CapturePalette.softBlue))
+        XCTAssertEqual(rectangle.strokeColor.usingColorSpace(.sRGB), CapturePalette.softBlue.usingColorSpace(.sRGB))
+        XCTAssertTrue(state.applyThicknessToSelected(14))
+        XCTAssertEqual(rectangle.strokeWidth, 14)
+        XCTAssertTrue(state.undo())
+        XCTAssertEqual(rectangle.strokeWidth, 14)
+        XCTAssertEqual((state.annotations.first as? RectangleAnnotation)?.strokeWidth, 6)
+    }
+
+    func testPaletteContainsSevenSoftColors() {
+        XCTAssertEqual(CapturePalette.all.map(\.name), ["Red", "Blue", "Green", "Orange", "Yellow", "White", "Black"])
     }
 
     func testAnnotationOrderingReturnsTopmostHit() {

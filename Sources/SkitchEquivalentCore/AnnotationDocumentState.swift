@@ -66,6 +66,66 @@ public final class AnnotationDocumentState {
         self.selectedAnnotationID = nil
     }
 
+    @discardableResult
+    public func applyColorToSelected(_ color: NSColor) -> Bool {
+        guard let annotation = annotation(with: selectedAnnotationID) else { return false }
+        switch annotation {
+        case let arrow as ArrowAnnotation:
+            recordUndoSnapshot()
+            arrow.color = color
+        case let text as TextAnnotation:
+            recordUndoSnapshot()
+            text.textColor = color
+        case let rectangle as RectangleAnnotation:
+            recordUndoSnapshot()
+            rectangle.strokeColor = color
+        case let ellipse as EllipseAnnotation:
+            recordUndoSnapshot()
+            ellipse.strokeColor = color
+        default:
+            return false
+        }
+        return true
+    }
+
+    @discardableResult
+    public func applyThicknessToSelected(_ thickness: CGFloat) -> Bool {
+        guard let annotation = annotation(with: selectedAnnotationID) else { return false }
+        switch annotation {
+        case let arrow as ArrowAnnotation:
+            recordUndoSnapshot()
+            arrow.strokeWidth = thickness
+        case let rectangle as RectangleAnnotation:
+            recordUndoSnapshot()
+            rectangle.strokeWidth = thickness
+        case let ellipse as EllipseAnnotation:
+            recordUndoSnapshot()
+            ellipse.strokeWidth = thickness
+        default:
+            return false
+        }
+        return true
+    }
+
+    @discardableResult
+    public func resizeSelected(handle: SelectionHandle, to point: CGPoint) -> Bool {
+        guard let annotation = annotation(with: selectedAnnotationID) else { return false }
+        recordUndoSnapshot()
+        if let arrow = annotation as? ArrowAnnotation {
+            switch handle {
+            case .arrowStart:
+                arrow.start = point
+            case .arrowEnd:
+                arrow.end = point
+            default:
+                return false
+            }
+        } else {
+            annotation.bounds = AnnotationSelectionGeometry.resizedRect(annotation.bounds, moving: handle, to: point)
+        }
+        return true
+    }
+
     public func setCropRect(_ rect: CGRect?) {
         recordUndoSnapshot()
         guard let rect else {

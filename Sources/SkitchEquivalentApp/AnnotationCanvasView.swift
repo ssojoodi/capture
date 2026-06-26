@@ -10,6 +10,8 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     private var activeAnnotation: Annotation?
     private var activeCropRect: CGRect?
     private var movingAnnotation: Annotation?
+    private var resizingAnnotation: Annotation?
+    private var resizingHandle: SelectionHandle?
     private var lastMovePoint: CGPoint?
     private var recordedMoveUndo = false
     private weak var activeTextField: NSTextField?
@@ -121,6 +123,10 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             annotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
         }
 
+        if let selected = state.annotation(with: state.selectedAnnotationID) {
+            drawSelection(for: selected, in: context)
+        }
+
         if let activeAnnotation {
             activeAnnotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
             drawSelection(activeAnnotation.bounds, in: context)
@@ -181,6 +187,44 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         context.restoreGState()
     }
 
+    private func drawSelection(for annotation: Annotation, in context: CGContext) {
+        if annotation is ArrowAnnotation {
+            drawArrowSelection(annotation, in: context)
+            return
+        }
+
+        drawSelection(annotation.bounds, in: context)
+        for (_, center) in AnnotationSelectionGeometry.handleCenters(for: annotation) {
+            drawHandle(center, in: context)
+        }
+    }
+
+    private func drawArrowSelection(_ annotation: Annotation, in context: CGContext) {
+        guard let arrow = annotation as? ArrowAnnotation else { return }
+        context.saveGState()
+        context.setStrokeColor(NSColor.selectedControlColor.cgColor)
+        context.setLineWidth(2 / max(zoom, 0.01))
+        context.setLineDash(phase: 0, lengths: [6 / max(zoom, 0.01), 4 / max(zoom, 0.01)])
+        context.move(to: arrow.start)
+        context.addLine(to: arrow.end)
+        context.strokePath()
+        context.restoreGState()
+        drawHandle(arrow.start, in: context)
+        drawHandle(arrow.end, in: context)
+    }
+
+    private func drawHandle(_ center: CGPoint, in context: CGContext) {
+        let size = 10 / max(zoom, 0.01)
+        let rect = CGRect(x: center.x - size / 2, y: center.y - size / 2, width: size, height: size)
+        context.saveGState()
+        context.setFillColor(NSColor.white.cgColor)
+        context.setStrokeColor(NSColor.selectedControlColor.cgColor)
+        context.setLineWidth(2 / max(zoom, 0.01))
+        context.fillEllipse(in: rect)
+        context.strokeEllipse(in: rect)
+        context.restoreGState()
+    }
+
     private func drawCrop(_ rect: CGRect, in context: CGContext) {
         let crop = rect.normalized
         context.saveGState()
@@ -201,9 +245,19 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         activeAnnotation = nil
         activeCropRect = nil
         movingAnnotation = nil
+        resizingAnnotation = nil
+        resizingHandle = nil
         recordedMoveUndo = false
 
         if state.selectedTool == .select {
+            if let selected = state.annotation(with: state.selectedAnnotationID),
+               let handle = AnnotationSelectionGeometry.hitHandle(at: point, annotation: selected, hitRadius: 10 / max(zoom, 0.01)) {
+                resizingAnnotation = selected
+                resizingHandle = handle
+                needsDisplay = true
+                return
+            }
+
             let hit = state.annotation(at: point)
             state.selectedAnnotationID = hit?.id
             if event.clickCount >= 2, let text = hit as? TextAnnotation {
@@ -294,6 +348,25 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         guard state.hasImage, let start = dragStartImagePoint else { return }
         let point = imagePoint(for: event.locationInWindow).clampedToImage(size: state.imageSize)
 
+        if let resizingAnnotation, let resizingHandle {
+            if !recordedMoveUndo {
+                state.recordUndoSnapshot()
+                recordedMoveUndo = true
+            }
+            if let arrow = resizingAnnotation as? ArrowAnnotation {
+                if resizingHandle == .arrowStart {
+                    arrow.start = point
+                } else if resizingHandle == .arrowEnd {
+                    arrow.end = point
+                }
+            } else {
+                resizingAnnotation.bounds = AnnotationSelectionGeometry.resizedRect(resizingAnnotation.bounds, moving: resizingHandle, to: point)
+                repositionActiveTextField()
+            }
+            needsDisplay = true
+            return
+        }
+
         if let movingAnnotation, let lastMovePoint {
             if !recordedMoveUndo {
                 state.recordUndoSnapshot()
@@ -321,6 +394,8 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             activeAnnotation = nil
             dragStartImagePoint = nil
             movingAnnotation = nil
+            resizingAnnotation = nil
+            resizingHandle = nil
             lastMovePoint = nil
             activeCropRect = nil
             needsDisplay = true
@@ -408,6 +483,24 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         let normalized = imageRect.normalized
         let origin = ViewportTransform(zoom: zoom, imageOrigin: imageOrigin).viewPoint(forImagePoint: normalized.origin)
         return CGRect(x: origin.x, y: origin.y, width: normalized.width * zoom, height: normalized.height * zoom)
+    }
+
+    func applySelectedColor(_ color: NSColor) {
+        if state.applyColorToSelected(color) {
+            statusHandler?("Changed color")
+            needsDisplay = true
+        } else {
+            statusHandler?("Select an annotation to change color")
+        }
+    }
+
+    func applySelectedThickness(_ thickness: CGFloat) {
+        if state.applyThicknessToSelected(thickness) {
+            statusHandler?("Changed thickness")
+            needsDisplay = true
+        } else {
+            statusHandler?("Select a line or arrow to change thickness")
+        }
     }
 }
 
