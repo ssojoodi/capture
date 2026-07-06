@@ -84,15 +84,17 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             if self.canvasView.isEditingText {
                 return event
             }
-            let command = event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command)
-            if command, let key = event.charactersIgnoringModifiers?.lowercased() {
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let hasCommand = modifiers.contains(.command)
+            let hasShift = modifiers.contains(.shift)
+            if hasCommand, let key = event.charactersIgnoringModifiers?.lowercased() {
                 switch key {
                 case "o": self.openImage(nil); return nil
-                case "v": self.pasteImage(nil); return nil
-                case "c": self.copyFlattenedImage(nil); return nil
+                case "v" where hasShift: self.pasteImage(nil); return nil
+                case "c" where hasShift: self.copyFlattenedImage(nil); return nil
                 case "e": self.exportJPG(nil); return nil
                 case "z":
-                    if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.shift) {
+                    if hasShift {
                         self.redo(nil)
                     } else {
                         self.undo(nil)

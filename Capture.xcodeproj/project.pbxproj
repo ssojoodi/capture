@@ -20,6 +20,7 @@
 		A00100100100100100100109 /* AppMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200100100100100100109 /* AppMenu.swift */; };
 		A0010010010010010010010A /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020010010010010010010A /* MainWindowController.swift */; };
 		A0010010010010010010010B /* AnnotationCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020010010010010010010B /* AnnotationCanvasView.swift */; };
+		A00100100100100100100112 /* TextAnnotationEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200100100100100100112 /* TextAnnotationEditorView.swift */; };
 		A00100100100100100100111 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00200100100100100100111 /* Assets.xcassets */; };
 		A0010010010010010010010C /* AnnotationCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020010010010010010010C /* AnnotationCoreTests.swift */; };
 		A0010010010010010010010D /* CaptureCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A00200100100100100100106 /* CaptureCore.framework */; };
@@ -49,6 +50,7 @@
 		A00200100100100100100109 /* AppMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMenu.swift; sourceTree = "<group>"; };
 		A0020010010010010010010A /* MainWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowController.swift; sourceTree = "<group>"; };
 		A0020010010010010010010B /* AnnotationCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationCanvasView.swift; sourceTree = "<group>"; };
+		A00200100100100100100112 /* TextAnnotationEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextAnnotationEditorView.swift; sourceTree = "<group>"; };
 		A00200100100100100100111 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A0020010010010010010010C /* AnnotationCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationCoreTests.swift; sourceTree = "<group>"; };
 		A0020010010010010010010D /* CaptureCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CaptureCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -64,7 +66,7 @@
 		A00800100100100100100101 = {isa = PBXGroup; children = (A00800100100100100100102 /* Sources */, A00800100100100100100105 /* Tests */, A00800100100100100100106 /* Products */, ); sourceTree = "<group>"; };
 		A00800100100100100100102 /* Sources */ = {isa = PBXGroup; children = (A00800100100100100100103 /* CaptureCore */, A00800100100100100100104 /* CaptureApp */, ); path = Sources; sourceTree = "<group>"; };
 		A00800100100100100100103 /* CaptureCore */ = {isa = PBXGroup; children = (A00200100100100100100101 /* Tool.swift */, A00200100100100100100102 /* Geometry.swift */, A0020010010010010010010E /* CapturePalette.swift */, A0020010010010010010010F /* SelectionGeometry.swift */, A00200100100100100100110 /* BlurRenderer.swift */, A00200100100100100100103 /* Annotation.swift */, A00200100100100100100104 /* AnnotationDocumentState.swift */, A00200100100100100100105 /* ImageRenderer.swift */, ); path = CaptureCore; sourceTree = "<group>"; };
-		A00800100100100100100104 /* CaptureApp */ = {isa = PBXGroup; children = (A00200100100100100100108 /* main.swift */, A00200100100100100100109 /* AppMenu.swift */, A0020010010010010010010A /* MainWindowController.swift */, A0020010010010010010010B /* AnnotationCanvasView.swift */, A00200100100100100100111 /* Assets.xcassets */, ); path = CaptureApp; sourceTree = "<group>"; };
+		A00800100100100100100104 /* CaptureApp */ = {isa = PBXGroup; children = (A00200100100100100100108 /* main.swift */, A00200100100100100100109 /* AppMenu.swift */, A0020010010010010010010A /* MainWindowController.swift */, A0020010010010010010010B /* AnnotationCanvasView.swift */, A00200100100100100100112 /* TextAnnotationEditorView.swift */, A00200100100100100100111 /* Assets.xcassets */, ); path = CaptureApp; sourceTree = "<group>"; };
 		A00800100100100100100105 /* Tests */ = {isa = PBXGroup; children = (A0020010010010010010010C /* AnnotationCoreTests.swift */, ); path = Tests/CaptureCoreTests; sourceTree = "<group>"; };
 		A00800100100100100100106 /* Products */ = {isa = PBXGroup; children = (A00200100100100100100106 /* CaptureCore.framework */, A00200100100100100100107 /* Capture.app */, A0020010010010010010010D /* CaptureCoreTests.xctest */, ); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
@@ -85,7 +87,7 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		A01000100100100100100101 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100100100100100100101 /* Tool.swift in Sources */, A00100100100100100100102 /* Geometry.swift in Sources */, A0010010010010010010010E /* CapturePalette.swift in Sources */, A0010010010010010010010F /* SelectionGeometry.swift in Sources */, A00100100100100100100110 /* BlurRenderer.swift in Sources */, A00100100100100100100103 /* Annotation.swift in Sources */, A00100100100100100100104 /* AnnotationDocumentState.swift in Sources */, A00100100100100100100105 /* ImageRenderer.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
-		A01000100100100100100102 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100100100100100100108 /* main.swift in Sources */, A00100100100100100100109 /* AppMenu.swift in Sources */, A0010010010010010010010A /* MainWindowController.swift in Sources */, A0010010010010010010010B /* AnnotationCanvasView.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+		A01000100100100100100102 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100100100100100100108 /* main.swift in Sources */, A00100100100100100100109 /* AppMenu.swift in Sources */, A0010010010010010010010A /* MainWindowController.swift in Sources */, A0010010010010010010010B /* AnnotationCanvasView.swift in Sources */, A00100100100100100100112 /* TextAnnotationEditorView.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
 		A01000100100100100100103 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A0010010010010010010010C /* AnnotationCoreTests.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
