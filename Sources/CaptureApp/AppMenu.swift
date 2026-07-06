@@ -22,9 +22,13 @@ enum AppMenu {
         fileItem.submenu = fileMenu
 
         let editMenu = NSMenu(title: "Edit")
-        let pasteItem = editMenu.addItem(withTitle: "Paste", action: #selector(MainWindowController.pasteImage(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(NSMenuItem.separator())
+        let pasteItem = editMenu.addItem(withTitle: "Paste Image", action: #selector(MainWindowController.pasteImage(_:)), keyEquivalent: "v")
         pasteItem.keyEquivalentModifierMask = [.command, .shift]
-        let copyItem = editMenu.addItem(withTitle: "Copy", action: #selector(MainWindowController.copyFlattenedImage(_:)), keyEquivalent: "c")
+        let copyItem = editMenu.addItem(withTitle: "Copy Image", action: #selector(MainWindowController.copyFlattenedImage(_:)), keyEquivalent: "c")
         copyItem.keyEquivalentModifierMask = [.command, .shift]
         editMenu.addItem(withTitle: "Delete", action: #selector(MainWindowController.deleteSelected(_:)), keyEquivalent: "\u{8}")
         editItem.submenu = editMenu
