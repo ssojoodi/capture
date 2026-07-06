@@ -256,6 +256,13 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         let point = imagePoint(for: event.locationInWindow).clampedToImage(size: state.imageSize)
         interaction = .idle
 
+        if let selected = state.annotation(with: state.selectedAnnotationID),
+           let handle = AnnotationSelectionGeometry.hitHandle(at: point, annotation: selected, hitRadius: 10 / max(zoom, 0.01)) {
+            interaction = .resizing(annotation: selected, handle: handle, didRecordUndo: false)
+            needsDisplay = true
+            return
+        }
+
         if state.selectedTool == .select {
             if let selected = state.annotation(with: state.selectedAnnotationID),
                let handle = AnnotationSelectionGeometry.hitHandle(at: point, annotation: selected, hitRadius: 10 / max(zoom, 0.01)) {
@@ -283,7 +290,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             interaction = .creatingAnnotation(start: point, annotation: ArrowAnnotation(start: point, end: point))
         case .text:
             let annotation = TextAnnotation(bounds: CGRect(x: point.x, y: point.y, width: 190, height: 58))
-            state.addAnnotation(annotation, select: false)
+            state.addAnnotation(annotation, select: true)
             beginEditing(annotation, isNew: true)
             statusHandler?("Added text annotation")
         case .blur:
@@ -396,7 +403,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
 
         if case let .creatingAnnotation(_, annotation) = interaction,
            annotation.bounds.width > 4 || annotation.bounds.height > 4 {
-            state.addAnnotation(annotation, select: false)
+            state.addAnnotation(annotation, select: true)
             statusHandler?("Added \(state.selectedTool.rawValue) annotation")
             return
         }
