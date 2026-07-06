@@ -1,7 +1,10 @@
 .build/
 DerivedData/
 xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
 .DS_Store
 release.env
+Config/LocalSigning.xcconfig
 
 docs/
