@@ -70,6 +70,35 @@ extension AnnotationDocumentState {
         self.selectedAnnotationID = nil
     }
 
+    public func applyBlur(_ rect: CGRect, radius: CGFloat = 16) {
+        guard let originalCGImage = baseCGImage else { return }
+        let imageBounds = CGRect(origin: .zero, size: imageSize)
+        let normalized = rect.normalized.clamped(to: imageBounds).integral
+        guard !normalized.isNull, normalized.width >= 1, normalized.height >= 1 else { return }
+        guard let blurred = BlurRenderer.blurredRegion(from: originalCGImage, imageSize: imageSize, rect: normalized, radius: radius) else { return }
+
+        let colorSpace = originalCGImage.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: Int(imageSize.width.rounded()),
+            height: Int(imageSize.height.rounded()),
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        ) else { return }
+
+        recordUndoSnapshot()
+        context.interpolationQuality = .high
+        context.setBlendMode(.copy)
+        context.draw(originalCGImage, in: imageBounds)
+        context.draw(blurred, in: normalized)
+        guard let updated = context.makeImage() else { return }
+        baseCGImage = updated
+        baseImage = NSImage(cgImage: updated, size: imageSize)
+        selectedAnnotationID = nil
+    }
+
     @discardableResult
     public func applyColorToSelected(_ color: NSColor) -> Bool {
         guard let annotation = annotation(with: selectedAnnotationID) else { return false }

@@ -130,17 +130,35 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         let imageRect = CGRect(origin: .zero, size: state.imageSize)
         context.draw(baseCGImage, in: imageRect)
 
-        for annotation in state.annotations {
+        let activeAnnotation: Annotation?
+        if case let .creatingAnnotation(_, annotation) = interaction {
+            activeAnnotation = annotation
+        } else {
+            activeAnnotation = nil
+        }
+
+        for annotation in state.annotations where annotation is BlurAnnotation {
             annotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
+        }
+
+        if let activeAnnotation, activeAnnotation is BlurAnnotation {
+            activeAnnotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
+        }
+
+        for annotation in state.annotations where !(annotation is BlurAnnotation) {
+            annotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
+        }
+
+        if let activeAnnotation, !(activeAnnotation is BlurAnnotation) {
+            activeAnnotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
         }
 
         if let selected = state.annotation(with: state.selectedAnnotationID) {
             drawSelection(for: selected, in: context)
         }
 
-        if case let .creatingAnnotation(_, annotation) = interaction {
-            annotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
-            drawSelection(annotation.bounds, in: context)
+        if let activeAnnotation {
+            drawSelection(for: activeAnnotation, in: context)
         }
 
         let visibleCrop: CGRect?
@@ -411,6 +429,11 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
 
         if case let .creatingAnnotation(_, annotation) = interaction,
            annotation.bounds.width > 4 || annotation.bounds.height > 4 {
+            if annotation is BlurAnnotation {
+                state.applyBlur(annotation.bounds)
+                statusHandler?("Blurred image")
+                return
+            }
             state.addAnnotation(annotation, select: true)
             statusHandler?("Added \(state.selectedTool.rawValue) annotation")
             return

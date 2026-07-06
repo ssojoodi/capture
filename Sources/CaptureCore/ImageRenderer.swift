@@ -23,7 +23,10 @@ public enum ImageRenderer {
         context.interpolationQuality = .high
         context.translateBy(x: -crop.origin.x, y: -crop.origin.y)
         context.draw(baseCGImage, in: imageBounds)
-        for annotation in state.annotations {
+        for annotation in state.annotations where annotation is BlurAnnotation {
+            annotation.draw(in: context, baseImage: baseCGImage, imageSize: sourceSize, scale: 1)
+        }
+        for annotation in state.annotations where !(annotation is BlurAnnotation) {
             annotation.draw(in: context, baseImage: baseCGImage, imageSize: sourceSize, scale: 1)
         }
 
