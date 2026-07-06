@@ -15,6 +15,9 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     private var zoom: CGFloat = 1
     private var imageOrigin: CGPoint = .zero
     private var interaction: CanvasInteraction = .idle
+    private var currentColor: NSColor = CapturePalette.softRed
+    private var currentLineThickness: CGFloat = 7
+    private var currentTextSize: CGFloat = 52
     private weak var activeTextField: NSTextField?
     private weak var activeTextAnnotation: TextAnnotation?
     private var activeTextWasNew = false
@@ -287,18 +290,23 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
 
         switch state.selectedTool {
         case .arrow:
-            interaction = .creatingAnnotation(start: point, annotation: ArrowAnnotation(start: point, end: point))
+            interaction = .creatingAnnotation(start: point, annotation: ArrowAnnotation(start: point, end: point, color: currentColor, strokeWidth: currentLineThickness))
         case .text:
-            let annotation = TextAnnotation(bounds: CGRect(x: point.x, y: point.y, width: 190, height: 58))
+            let annotation = TextAnnotation(
+                bounds: CGRect(x: point.x, y: point.y, width: 190, height: 58),
+                fontSize: currentTextSize,
+                textColor: currentColor,
+                backgroundColor: currentColor
+            )
             state.addAnnotation(annotation, select: true)
             beginEditing(annotation, isNew: true)
             statusHandler?("Added text annotation")
         case .blur:
             interaction = .creatingAnnotation(start: point, annotation: BlurAnnotation(bounds: CGRect(origin: point, size: .zero)))
         case .rectangle:
-            interaction = .creatingAnnotation(start: point, annotation: RectangleAnnotation(bounds: CGRect(origin: point, size: .zero)))
+            interaction = .creatingAnnotation(start: point, annotation: RectangleAnnotation(bounds: CGRect(origin: point, size: .zero), strokeColor: currentColor, strokeWidth: currentLineThickness))
         case .ellipse:
-            interaction = .creatingAnnotation(start: point, annotation: EllipseAnnotation(bounds: CGRect(origin: point, size: .zero)))
+            interaction = .creatingAnnotation(start: point, annotation: EllipseAnnotation(bounds: CGRect(origin: point, size: .zero), strokeColor: currentColor, strokeWidth: currentLineThickness))
         case .crop:
             interaction = .creatingCrop(start: point, rect: CGRect(origin: point, size: .zero))
         case .select:
@@ -460,15 +468,18 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     }
 
     func applySelectedColor(_ color: NSColor) {
+        currentColor = color
         if state.applyColorToSelected(color) {
             statusHandler?("Changed color")
             needsDisplay = true
         } else {
-            statusHandler?("Select an annotation to change color")
+            statusHandler?("Color selected")
         }
     }
 
     func applySelectedSize(lineThickness: CGFloat, textSize: CGFloat) {
+        currentLineThickness = lineThickness
+        currentTextSize = textSize
         let selectedIsText = state.annotation(with: state.selectedAnnotationID) is TextAnnotation
         let size = selectedIsText ? textSize : lineThickness
         if state.applyThicknessToSelected(size) {
@@ -480,7 +491,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             }
             needsDisplay = true
         } else {
-            statusHandler?("Select text, a line, or a shape to change size")
+            statusHandler?("Size selected")
         }
     }
 }
