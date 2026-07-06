@@ -137,7 +137,7 @@ public final class TextAnnotation: Annotation {
             .foregroundColor: textColor,
             .paragraphStyle: paragraph
         ]
-        let textRect = bounds.insetBy(dx: 10, dy: max(4, (bounds.height - fontSize * 1.2) / 2))
+        let textRect = bounds.insetBy(dx: 10, dy: 6)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
         NSString(string: text).draw(in: textRect, withAttributes: attributes)

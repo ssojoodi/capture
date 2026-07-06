@@ -81,6 +81,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
+            if self.canvasView.isEditingText {
+                return event
+            }
             let command = event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command)
             if command, let key = event.charactersIgnoringModifiers?.lowercased() {
                 switch key {

@@ -2,7 +2,7 @@ import AppKit
 import UniformTypeIdentifiers
 import CaptureCore
 
-final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
+final class AnnotationCanvasView: NSView, NSTextViewDelegate {
     private enum CanvasInteraction {
         case idle
         case creatingAnnotation(start: CGPoint, annotation: Annotation)
@@ -18,9 +18,12 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     private var currentColor: NSColor = CapturePalette.softRed
     private var currentLineThickness: CGFloat = 7
     private var currentTextSize: CGFloat = 52
-    private weak var activeTextField: NSTextField?
+    private weak var activeTextView: NSTextView?
     private weak var activeTextAnnotation: TextAnnotation?
     private var activeTextWasNew = false
+    private var activeTextDidRecordUndo = false
+    private let defaultTextAnnotationSize = CGSize(width: 260, height: 76)
+    var isEditingText: Bool { activeTextView != nil }
     var statusHandler: ((String) -> Void)?
 
     init(state: AnnotationDocumentState) {
@@ -145,7 +148,7 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             activeAnnotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
         }
 
-        for annotation in state.annotations where !(annotation is BlurAnnotation) {
+        for annotation in state.annotations where !(annotation is BlurAnnotation) && annotation.id != activeTextAnnotation?.id {
             annotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
         }
 
@@ -311,7 +314,8 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             interaction = .creatingAnnotation(start: point, annotation: ArrowAnnotation(start: point, end: point, color: currentColor, strokeWidth: currentLineThickness))
         case .text:
             let annotation = TextAnnotation(
-                bounds: CGRect(x: point.x, y: point.y, width: 190, height: 58),
+                bounds: CGRect(origin: point, size: defaultTextAnnotationSize),
+                text: "",
                 fontSize: currentTextSize,
                 textColor: currentColor,
                 backgroundColor: currentColor
@@ -334,22 +338,33 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     }
 
     private func beginEditing(_ annotation: TextAnnotation, isNew: Bool = false) {
-        activeTextField?.removeFromSuperview()
-        let field = NSTextField(string: annotation.text)
+        activeTextView?.removeFromSuperview()
+        let field = NSTextView(frame: viewRect(forImageRect: annotation.bounds))
+        field.string = annotation.text
         field.font = .boldSystemFont(ofSize: max(16, annotation.fontSize * zoom))
         field.textColor = annotation.textColor
         field.backgroundColor = annotation.drawsBackground ? annotation.backgroundColor : .clear
         field.drawsBackground = annotation.drawsBackground
-        field.isBordered = false
+        field.isRichText = false
+        field.importsGraphics = false
+        field.allowsUndo = true
+        field.isEditable = true
+        field.isSelectable = true
+        field.isHorizontallyResizable = true
+        field.isVerticallyResizable = true
+        field.maxSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         field.alignment = .center
         field.delegate = self
-        field.target = self
-        field.action = #selector(commitActiveTextEditAction(_:))
-        field.frame = viewRect(forImageRect: annotation.bounds)
+        field.textContainerInset = CGSize(width: 10 * zoom, height: 6 * zoom)
+        field.textContainer?.lineFragmentPadding = 0
+        field.textContainer?.widthTracksTextView = false
+        field.textContainer?.containerSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         addSubview(field)
-        activeTextField = field
+        activeTextView = field
         activeTextAnnotation = annotation
         activeTextWasNew = isNew
+        activeTextDidRecordUndo = false
+        resizeActiveTextFieldToFitContent()
         window?.makeFirstResponder(field)
     }
 
@@ -357,32 +372,72 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         commitActiveTextEdit()
     }
 
-    func controlTextDidEndEditing(_ obj: Notification) {
+    func textDidEndEditing(_ notification: Notification) {
         commitActiveTextEdit()
     }
 
+    func textDidChange(_ notification: Notification) {
+        resizeActiveTextFieldToFitContent()
+    }
+
     private func commitActiveTextEdit() {
-        guard let field = activeTextField else { return }
+        guard let field = activeTextView else { return }
         if let annotation = activeTextAnnotation {
-            let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty, text != annotation.text {
-                if !activeTextWasNew {
-                    state.recordUndoSnapshot()
-                }
+            let text = field.string.trimmingCharacters(in: .whitespacesAndNewlines)
+            if text != annotation.text {
+                recordActiveTextUndoIfNeeded()
                 annotation.text = text
             }
         }
         field.removeFromSuperview()
-        activeTextField = nil
+        activeTextView = nil
         activeTextAnnotation = nil
         activeTextWasNew = false
+        activeTextDidRecordUndo = false
         needsDisplay = true
     }
 
     private func repositionActiveTextField() {
-        guard let field = activeTextField, let annotation = activeTextAnnotation else { return }
+        guard let field = activeTextView, let annotation = activeTextAnnotation else { return }
         field.frame = viewRect(forImageRect: annotation.bounds)
         field.font = .boldSystemFont(ofSize: max(16, annotation.fontSize * zoom))
+        field.textContainerInset = CGSize(width: 10 * zoom, height: 6 * zoom)
+        field.textContainer?.widthTracksTextView = false
+        field.textContainer?.containerSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+    }
+
+    private func resizeActiveTextFieldToFitContent() {
+        guard let field = activeTextView, let annotation = activeTextAnnotation else { return }
+        let font = NSFont.boldSystemFont(ofSize: max(16, annotation.fontSize * zoom))
+        let text = field.string.isEmpty ? "Text" : field.string
+        let measured = NSString(string: text).boundingRect(
+            with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font]
+        )
+        let neededSize = CGSize(
+            width: ceil((measured.width + 32 * zoom) / zoom),
+            height: ceil((measured.height + 20 * zoom) / zoom)
+        )
+        let newSize = CGSize(
+            width: max(annotation.bounds.width, neededSize.width),
+            height: max(annotation.bounds.height, neededSize.height)
+        )
+        guard newSize != annotation.bounds.size else {
+            repositionActiveTextField()
+            return
+        }
+
+        recordActiveTextUndoIfNeeded()
+        annotation.bounds.size = newSize
+        repositionActiveTextField()
+        needsDisplay = true
+    }
+
+    private func recordActiveTextUndoIfNeeded() {
+        guard !activeTextWasNew, !activeTextDidRecordUndo else { return }
+        state.recordUndoSnapshot()
+        activeTextDidRecordUndo = true
     }
 
     override func mouseDragged(with event: NSEvent) {
