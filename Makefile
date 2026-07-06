@@ -9,6 +9,7 @@ CONFIGURATION ?= Debug
 DESTINATION ?= platform=macOS
 DERIVED_DATA ?= .build/DerivedData
 APP := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)/$(APP_NAME).app
+INSTALL_APP := /Applications/$(APP_NAME).app
 RELEASE_DIR ?= .build/release
 RELEASE_SOURCE_APP := $(DERIVED_DATA)/Build/Products/Release/$(APP_NAME).app
 VERSION ?= $(shell date +%Y.%m.%d.%H%M)
@@ -46,7 +47,7 @@ APP_ICON_SPECS := \
 
 .DEFAULT_GOAL := build
 
-.PHONY: assets build buildlocal clean help paths release run test
+.PHONY: assets build buildlocal clean help paths release run test uninstall
 
 assets: $(LOGO_PNG) $(APP_ICON_PNG) $(DMG_BACKGROUND_PNG)
 	mkdir -p "$(APPICONSET_DIR)"
@@ -108,6 +109,9 @@ test: assets
 run: build
 	open "$(APP)"
 
+uninstall:
+	rm -rf "$(INSTALL_APP)"
+
 release:
 	@if [ -z "$(strip $(SIGN_IDENTITY))" ]; then \
 		printf "SIGN_IDENTITY is required.\n"; \
@@ -151,6 +155,7 @@ help:
 	@printf "  make clean       Clean build products, generated assets, and release output\n"
 	@printf "  make test        Run unit tests\n"
 	@printf "  make run         Build and open the app\n"
+	@printf "  make uninstall   Remove /Applications/Capture.app\n"
 	@printf "  make release     Build, sign, package, notarize, staple, and validate a DMG\n"
 	@printf "  make paths       Print important generated paths\n"
 	@printf "\nVariables:\n"
