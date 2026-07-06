@@ -227,14 +227,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
 
     private func thicknessToolbarItem(_ identifier: NSToolbarItem.Identifier) -> NSToolbarItem {
         let item = NSToolbarItem(itemIdentifier: identifier)
-        item.label = "Thickness"
-        item.paletteLabel = "Thickness"
-        let control = NSSegmentedControl(labels: ["S", "M", "L"], trackingMode: .selectOne, target: self, action: #selector(selectThickness(_:)))
-        control.frame = NSRect(x: 0, y: 0, width: 86, height: 28)
-        control.selectedSegment = 1
+        item.label = "Size"
+        item.paletteLabel = "Size"
+        let control = NSSegmentedControl(labels: ["XS", "S", "M", "L", "XL"], trackingMode: .selectOne, target: self, action: #selector(selectThickness(_:)))
+        control.frame = NSRect(x: 0, y: 0, width: 142, height: 28)
+        control.selectedSegment = 2
         item.view = control
-        item.minSize = NSSize(width: 86, height: 28)
-        item.maxSize = NSSize(width: 96, height: 28)
+        item.minSize = NSSize(width: 142, height: 28)
+        item.maxSize = NSSize(width: 152, height: 28)
         return item
     }
 
@@ -272,10 +272,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     }
 
     @objc func selectThickness(_ sender: NSSegmentedControl) {
-        let thicknesses: [CGFloat] = [4, 8, 14]
+        let lineThicknesses: [CGFloat] = [4, 12, 16, 24, 32]
+        let textSizes: [CGFloat] = [32, 40, 52, 64, 82]
         let index = sender.selectedSegment
-        guard thicknesses.indices.contains(index) else { return }
-        canvasView.applySelectedThickness(thicknesses[index])
+        guard lineThicknesses.indices.contains(index), textSizes.indices.contains(index) else { return }
+        canvasView.applySelectedSize(lineThickness: lineThicknesses[index], textSize: textSizes[index])
     }
 
     @objc func undo(_ sender: Any?) {

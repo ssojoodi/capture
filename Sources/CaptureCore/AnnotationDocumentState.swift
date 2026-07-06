@@ -100,6 +100,10 @@ extension AnnotationDocumentState {
     public func applyThicknessToSelected(_ thickness: CGFloat) -> Bool {
         guard let annotation = annotation(with: selectedAnnotationID) else { return false }
         switch annotation {
+        case let text as TextAnnotation:
+            guard text.fontSize != thickness else { return false }
+            recordUndoSnapshot()
+            text.fontSize = thickness
         case let arrow as ArrowAnnotation:
             guard arrow.strokeWidth != thickness else { return false }
             recordUndoSnapshot()

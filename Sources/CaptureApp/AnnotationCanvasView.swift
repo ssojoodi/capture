@@ -468,12 +468,19 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         }
     }
 
-    func applySelectedThickness(_ thickness: CGFloat) {
-        if state.applyThicknessToSelected(thickness) {
-            statusHandler?("Changed thickness")
+    func applySelectedSize(lineThickness: CGFloat, textSize: CGFloat) {
+        let selectedIsText = state.annotation(with: state.selectedAnnotationID) is TextAnnotation
+        let size = selectedIsText ? textSize : lineThickness
+        if state.applyThicknessToSelected(size) {
+            repositionActiveTextField()
+            if selectedIsText {
+                statusHandler?("Changed font size")
+            } else {
+                statusHandler?("Changed thickness")
+            }
             needsDisplay = true
         } else {
-            statusHandler?("Select a line or arrow to change thickness")
+            statusHandler?("Select text, a line, or a shape to change size")
         }
     }
 }
