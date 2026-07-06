@@ -1,5 +1,5 @@
 import AppKit
-import SkitchEquivalentCore
+import CaptureCore
 
 final class MainWindowController: NSWindowController, NSToolbarDelegate {
     private let state = AnnotationDocumentState()
@@ -20,6 +20,34 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         static let zoomIn = NSToolbarItem.Identifier("zoomIn")
         static let zoomOut = NSToolbarItem.Identifier("zoomOut")
         static let zoomFit = NSToolbarItem.Identifier("zoomFit")
+    }
+
+    private struct ToolbarSpec {
+        let identifier: NSToolbarItem.Identifier
+        let label: String
+        let symbol: String
+        let action: Selector
+    }
+
+    private var toolbarSpecs: [ToolbarSpec] {
+        [
+            ToolbarSpec(identifier: ToolbarID.open, label: "Open", symbol: "folder", action: #selector(openImage(_:))),
+            ToolbarSpec(identifier: ToolbarID.paste, label: "Paste", symbol: "doc.on.clipboard", action: #selector(pasteImage(_:))),
+            ToolbarSpec(identifier: ToolbarID.copy, label: "Copy", symbol: "doc.on.doc", action: #selector(copyFlattenedImage(_:))),
+            ToolbarSpec(identifier: ToolbarID.export, label: "Export JPG", symbol: "square.and.arrow.down", action: #selector(exportJPG(_:))),
+            ToolbarSpec(identifier: ToolbarID.undo, label: "Undo", symbol: "arrow.uturn.backward", action: #selector(undo(_:))),
+            ToolbarSpec(identifier: ToolbarID.redo, label: "Redo", symbol: "arrow.uturn.forward", action: #selector(redo(_:))),
+            ToolbarSpec(identifier: ToolbarID.zoomIn, label: "Zoom In", symbol: "plus.magnifyingglass", action: #selector(zoomIn(_:))),
+            ToolbarSpec(identifier: ToolbarID.zoomOut, label: "Zoom Out", symbol: "minus.magnifyingglass", action: #selector(zoomOut(_:))),
+            ToolbarSpec(identifier: ToolbarID.zoomFit, label: "Fit", symbol: "arrow.up.left.and.down.right.magnifyingglass", action: #selector(zoomToFit(_:))),
+            ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.select.rawValue), label: "Select", symbol: "cursorarrow", action: #selector(selectTool(_:))),
+            ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.arrow.rawValue), label: "Arrow", symbol: "arrow.up.right", action: #selector(selectTool(_:))),
+            ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.text.rawValue), label: "Text", symbol: "textformat", action: #selector(selectTool(_:))),
+            ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.blur.rawValue), label: "Blur", symbol: "drop", action: #selector(selectTool(_:))),
+            ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.crop.rawValue), label: "Crop", symbol: "crop", action: #selector(selectTool(_:))),
+            ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.rectangle.rawValue), label: "Rect", symbol: "rectangle", action: #selector(selectTool(_:))),
+            ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.ellipse.rawValue), label: "Ellipse", symbol: "oval", action: #selector(selectTool(_:)))
+        ]
     }
 
     init() {
@@ -79,6 +107,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             }
             if event.keyCode == 53 {
                 self.state.selectedTool = .select
+                self.canvasView.cancelInteraction()
                 self.canvasView.toolDidChange()
                 self.statusLabel.stringValue = "Tool: select"
                 return nil
@@ -155,56 +184,28 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        if let spec = toolbarSpecs.first(where: { $0.identifier == itemIdentifier }) {
+            return toolbarItem(spec)
+        }
+
         switch itemIdentifier {
-        case ToolbarID.open:
-            return toolbarItem(itemIdentifier, label: "Open", symbol: "folder", action: #selector(openImage(_:)))
-        case ToolbarID.paste:
-            return toolbarItem(itemIdentifier, label: "Paste", symbol: "doc.on.clipboard", action: #selector(pasteImage(_:)))
-        case ToolbarID.copy:
-            return toolbarItem(itemIdentifier, label: "Copy", symbol: "doc.on.doc", action: #selector(copyFlattenedImage(_:)))
-        case ToolbarID.export:
-            return toolbarItem(itemIdentifier, label: "Export JPG", symbol: "square.and.arrow.down", action: #selector(exportJPG(_:)))
-        case ToolbarID.undo:
-            return toolbarItem(itemIdentifier, label: "Undo", symbol: "arrow.uturn.backward", action: #selector(undo(_:)))
-        case ToolbarID.redo:
-            return toolbarItem(itemIdentifier, label: "Redo", symbol: "arrow.uturn.forward", action: #selector(redo(_:)))
         case ToolbarID.color:
             return colorToolbarItem(itemIdentifier)
         case ToolbarID.thickness:
             return thicknessToolbarItem(itemIdentifier)
-        case ToolbarID.zoomIn:
-            return toolbarItem(itemIdentifier, label: "Zoom In", symbol: "plus.magnifyingglass", action: #selector(zoomIn(_:)))
-        case ToolbarID.zoomOut:
-            return toolbarItem(itemIdentifier, label: "Zoom Out", symbol: "minus.magnifyingglass", action: #selector(zoomOut(_:)))
-        case ToolbarID.zoomFit:
-            return toolbarItem(itemIdentifier, label: "Fit", symbol: "arrow.up.left.and.down.right.magnifyingglass", action: #selector(zoomToFit(_:)))
-        case NSToolbarItem.Identifier(Tool.select.rawValue):
-            return toolbarItem(itemIdentifier, label: "Select", symbol: "cursorarrow", action: #selector(selectTool(_:)))
-        case NSToolbarItem.Identifier(Tool.arrow.rawValue):
-            return toolbarItem(itemIdentifier, label: "Arrow", symbol: "arrow.up.right", action: #selector(selectTool(_:)))
-        case NSToolbarItem.Identifier(Tool.text.rawValue):
-            return toolbarItem(itemIdentifier, label: "Text", symbol: "textformat", action: #selector(selectTool(_:)))
-        case NSToolbarItem.Identifier(Tool.blur.rawValue):
-            return toolbarItem(itemIdentifier, label: "Blur", symbol: "drop", action: #selector(selectTool(_:)))
-        case NSToolbarItem.Identifier(Tool.crop.rawValue):
-            return toolbarItem(itemIdentifier, label: "Crop", symbol: "crop", action: #selector(selectTool(_:)))
-        case NSToolbarItem.Identifier(Tool.rectangle.rawValue):
-            return toolbarItem(itemIdentifier, label: "Rect", symbol: "rectangle", action: #selector(selectTool(_:)))
-        case NSToolbarItem.Identifier(Tool.ellipse.rawValue):
-            return toolbarItem(itemIdentifier, label: "Ellipse", symbol: "oval", action: #selector(selectTool(_:)))
         default:
             return nil
         }
     }
 
-    private func toolbarItem(_ identifier: NSToolbarItem.Identifier, label: String, symbol: String, action: Selector) -> NSToolbarItem {
-        let item = NSToolbarItem(itemIdentifier: identifier)
-        item.label = label
-        item.paletteLabel = label
-        item.toolTip = label
-        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+    private func toolbarItem(_ spec: ToolbarSpec) -> NSToolbarItem {
+        let item = NSToolbarItem(itemIdentifier: spec.identifier)
+        item.label = spec.label
+        item.paletteLabel = spec.label
+        item.toolTip = spec.label
+        item.image = NSImage(systemSymbolName: spec.symbol, accessibilityDescription: spec.label)
         item.target = self
-        item.action = action
+        item.action = spec.action
         return item
     }
 
@@ -278,6 +279,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     }
 
     @objc func undo(_ sender: Any?) {
+        canvasView.cancelInteraction()
         if state.undo() {
             canvasView.needsDisplay = true
             statusLabel.stringValue = "Undo"
@@ -287,6 +289,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     }
 
     @objc func redo(_ sender: Any?) {
+        canvasView.cancelInteraction()
         if state.redo() {
             canvasView.needsDisplay = true
             statusLabel.stringValue = "Redo"
@@ -344,18 +347,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     }
 
     @objc func deleteSelected(_ sender: Any?) {
+        canvasView.cancelInteraction()
         state.deleteSelectedAnnotation()
         canvasView.needsDisplay = true
-    }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
-            state.selectedTool = .select
-            canvasView.toolDidChange()
-            statusLabel.stringValue = "Tool: select"
-        } else {
-            super.keyDown(with: event)
-        }
     }
 
     private func load(image: NSImage, message: String) {

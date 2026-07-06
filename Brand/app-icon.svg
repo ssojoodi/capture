@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Capture app icon</title>
+  <desc id="desc">A simple abstract sky-blue arrow inside a rounded white square with a blue border.</desc>
+  <defs>
+    <filter id="soft-shadow" x="-18%" y="-18%" width="136%" height="136%">
+      <feDropShadow dx="0" dy="28" stdDeviation="34" flood-color="#0284c7" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="232" fill="#ffffff"/>
+  <g filter="url(#soft-shadow)">
+    <rect x="118" y="118" width="788" height="788" rx="184" fill="#ffffff"/>
+    <rect x="118" y="118" width="788" height="788" rx="184" fill="none" stroke="#7dd3fc" stroke-width="28"/>
+  </g>
+
+  <path
+    d="M230 486
+       C348 482 500 475 656 468
+       L640 386
+       L828 512
+       L640 638
+       L656 556
+       C500 549 348 542 230 538
+       C214 537 214 487 230 486Z"
+    fill="#0ea5e9"/>
+</svg>

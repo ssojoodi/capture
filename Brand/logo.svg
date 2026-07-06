@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">Capture logo</title>
+  <desc id="desc">Capture wordmark with a simple abstract sky-blue arrow in a rounded square.</desc>
+
+  <rect width="1200" height="320" fill="#ffffff"/>
+
+  <g transform="translate(58 48)">
+    <rect x="0" y="0" width="224" height="224" rx="54" fill="#ffffff"/>
+    <rect x="0" y="0" width="224" height="224" rx="54" fill="none" stroke="#7dd3fc" stroke-width="10"/>
+    <path
+      d="M46 104
+         C76 103 114 101 153 98
+         L149 76
+         L200 112
+         L149 148
+         L153 126
+         C114 123 76 121 46 120
+         C40 120 40 104 46 104Z"
+      fill="#0ea5e9"/>
+  </g>
+
+  <text
+    x="342"
+    y="150"
+    fill="#075985"
+    font-family="'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-size="88"
+    font-weight="700"
+    letter-spacing="-2">Capture</text>
+
+  <text
+    x="346"
+    y="198"
+    fill="#0284c7"
+    font-family="'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-size="23"
+    font-weight="600"
+    letter-spacing="4">FAST SCREENSHOT ANNOTATION</text>
+</svg>

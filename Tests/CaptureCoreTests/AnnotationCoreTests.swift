@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import SkitchEquivalentCore
+@testable import CaptureCore
 
 final class AnnotationCoreTests: XCTestCase {
     func testArrowHitTestingIncludesLineAndExcludesFarPoint() {
@@ -72,6 +72,17 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertEqual((state.annotations.first as? RectangleAnnotation)?.strokeWidth, 6)
     }
 
+    func testApplyingSameStyleDoesNotCreateUndoEntry() {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 200, height: 200, color: .white))
+        state.addAnnotation(RectangleAnnotation(bounds: CGRect(x: 20, y: 30, width: 100, height: 80)))
+
+        XCTAssertFalse(state.applyColorToSelected(CapturePalette.softRed))
+        XCTAssertFalse(state.applyThicknessToSelected(6))
+        XCTAssertTrue(state.undo())
+        XCTAssertEqual(state.annotations.count, 0)
+    }
+
     func testPaletteContainsSevenSoftColors() {
         XCTAssertEqual(CapturePalette.all.map(\.name), ["Red", "Blue", "Green", "Orange", "Yellow", "White", "Black"])
     }
@@ -132,6 +143,21 @@ final class AnnotationCoreTests: XCTestCase {
         let brightness = color.brightnessComponent
         XCTAssertGreaterThan(brightness, 0.08)
         XCTAssertLessThan(brightness, 0.92)
+    }
+
+    func testBlurPreservesBrightnessOnSolidColor() throws {
+        let sourceColor = NSColor(calibratedRed: 0.44, green: 0.72, blue: 0.96, alpha: 1)
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 120, height: 120, color: sourceColor))
+        state.addAnnotation(BlurAnnotation(bounds: CGRect(x: 20, y: 20, width: 80, height: 80), radius: 18))
+
+        let flattened = try XCTUnwrap(state.flattenedImage())
+        let blurredColor = try XCTUnwrap(flattened.sampleColor(x: 60, y: 60))
+        let expected = try XCTUnwrap(sourceColor.usingColorSpace(.sRGB))
+        XCTAssertEqual(blurredColor.redComponent, expected.redComponent, accuracy: 0.02)
+        XCTAssertEqual(blurredColor.greenComponent, expected.greenComponent, accuracy: 0.02)
+        XCTAssertEqual(blurredColor.blueComponent, expected.blueComponent, accuracy: 0.02)
+        XCTAssertEqual(blurredColor.alphaComponent, 1, accuracy: 0.001)
     }
 
     func testUndoRemovesMostRecentCommittedOperationAndRedoRestoresIt() {

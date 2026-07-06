@@ -17,8 +17,8 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A00500100100100100100102"
                BuildableName = "Capture.app"
-               BlueprintName = "SkitchEquivalent"
-               ReferencedContainer = "container:SkitchEquivalent.xcodeproj">
+               BlueprintName = "Capture"
+               ReferencedContainer = "container:Capture.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -30,9 +30,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A00500100100100100100103"
-               BuildableName = "SkitchEquivalentCoreTests.xctest"
-               BlueprintName = "SkitchEquivalentCoreTests"
-               ReferencedContainer = "container:SkitchEquivalent.xcodeproj">
+               BuildableName = "CaptureCoreTests.xctest"
+               BlueprintName = "CaptureCoreTests"
+               ReferencedContainer = "container:Capture.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -49,9 +49,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A00500100100100100100103"
-               BuildableName = "SkitchEquivalentCoreTests.xctest"
-               BlueprintName = "SkitchEquivalentCoreTests"
-               ReferencedContainer = "container:SkitchEquivalent.xcodeproj">
+               BuildableName = "CaptureCoreTests.xctest"
+               BlueprintName = "CaptureCoreTests"
+               ReferencedContainer = "container:Capture.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -72,8 +72,8 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A00500100100100100100102"
             BuildableName = "Capture.app"
-            BlueprintName = "SkitchEquivalent"
-            ReferencedContainer = "container:SkitchEquivalent.xcodeproj">
+            BlueprintName = "Capture"
+            ReferencedContainer = "container:Capture.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -89,8 +89,8 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A00500100100100100100102"
             BuildableName = "Capture.app"
-            BlueprintName = "SkitchEquivalent"
-            ReferencedContainer = "container:SkitchEquivalent.xcodeproj">
+            BlueprintName = "Capture"
+            ReferencedContainer = "container:Capture.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

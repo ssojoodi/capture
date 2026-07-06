@@ -1,19 +1,20 @@
 import AppKit
 import UniformTypeIdentifiers
-import SkitchEquivalentCore
+import CaptureCore
 
 final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
+    private enum CanvasInteraction {
+        case idle
+        case creatingAnnotation(start: CGPoint, annotation: Annotation)
+        case creatingCrop(start: CGPoint, rect: CGRect)
+        case moving(annotation: Annotation, lastPoint: CGPoint, didRecordUndo: Bool)
+        case resizing(annotation: Annotation, handle: SelectionHandle, didRecordUndo: Bool)
+    }
+
     private let state: AnnotationDocumentState
     private var zoom: CGFloat = 1
     private var imageOrigin: CGPoint = .zero
-    private var dragStartImagePoint: CGPoint?
-    private var activeAnnotation: Annotation?
-    private var activeCropRect: CGRect?
-    private var movingAnnotation: Annotation?
-    private var resizingAnnotation: Annotation?
-    private var resizingHandle: SelectionHandle?
-    private var lastMovePoint: CGPoint?
-    private var recordedMoveUndo = false
+    private var interaction: CanvasInteraction = .idle
     private weak var activeTextField: NSTextField?
     private weak var activeTextAnnotation: TextAnnotation?
     private var activeTextWasNew = false
@@ -35,7 +36,14 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
 
     func toolDidChange() {
         commitActiveTextEdit()
+        cancelInteraction()
         window?.invalidateCursorRects(for: self)
+        needsDisplay = true
+    }
+
+    func cancelInteraction() {
+        interaction = .idle
+        repositionActiveTextField()
         needsDisplay = true
     }
 
@@ -127,12 +135,18 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
             drawSelection(for: selected, in: context)
         }
 
-        if let activeAnnotation {
-            activeAnnotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
-            drawSelection(activeAnnotation.bounds, in: context)
+        if case let .creatingAnnotation(_, annotation) = interaction {
+            annotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
+            drawSelection(annotation.bounds, in: context)
         }
 
-        if let crop = activeCropRect ?? state.cropRect {
+        let visibleCrop: CGRect?
+        if case let .creatingCrop(_, rect) = interaction {
+            visibleCrop = rect
+        } else {
+            visibleCrop = state.cropRect
+        }
+        if let crop = visibleCrop {
             drawCrop(crop, in: context)
         }
         context.restoreGState()
@@ -240,20 +254,12 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
         commitActiveTextEdit()
         guard state.hasImage else { return }
         let point = imagePoint(for: event.locationInWindow).clampedToImage(size: state.imageSize)
-        dragStartImagePoint = point
-        lastMovePoint = point
-        activeAnnotation = nil
-        activeCropRect = nil
-        movingAnnotation = nil
-        resizingAnnotation = nil
-        resizingHandle = nil
-        recordedMoveUndo = false
+        interaction = .idle
 
         if state.selectedTool == .select {
             if let selected = state.annotation(with: state.selectedAnnotationID),
                let handle = AnnotationSelectionGeometry.hitHandle(at: point, annotation: selected, hitRadius: 10 / max(zoom, 0.01)) {
-                resizingAnnotation = selected
-                resizingHandle = handle
+                interaction = .resizing(annotation: selected, handle: handle, didRecordUndo: false)
                 needsDisplay = true
                 return
             }
@@ -265,27 +271,29 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
                 needsDisplay = true
                 return
             }
-            movingAnnotation = hit
+            if let hit {
+                interaction = .moving(annotation: hit, lastPoint: point, didRecordUndo: false)
+            }
             needsDisplay = true
             return
         }
 
         switch state.selectedTool {
         case .arrow:
-            activeAnnotation = ArrowAnnotation(start: point, end: point)
+            interaction = .creatingAnnotation(start: point, annotation: ArrowAnnotation(start: point, end: point))
         case .text:
             let annotation = TextAnnotation(bounds: CGRect(x: point.x, y: point.y, width: 190, height: 58))
             state.addAnnotation(annotation, select: false)
             beginEditing(annotation, isNew: true)
             statusHandler?("Added text annotation")
         case .blur:
-            activeAnnotation = BlurAnnotation(bounds: CGRect(origin: point, size: .zero))
+            interaction = .creatingAnnotation(start: point, annotation: BlurAnnotation(bounds: CGRect(origin: point, size: .zero)))
         case .rectangle:
-            activeAnnotation = RectangleAnnotation(bounds: CGRect(origin: point, size: .zero))
+            interaction = .creatingAnnotation(start: point, annotation: RectangleAnnotation(bounds: CGRect(origin: point, size: .zero)))
         case .ellipse:
-            activeAnnotation = EllipseAnnotation(bounds: CGRect(origin: point, size: .zero))
+            interaction = .creatingAnnotation(start: point, annotation: EllipseAnnotation(bounds: CGRect(origin: point, size: .zero)))
         case .crop:
-            activeCropRect = CGRect(origin: point, size: .zero)
+            interaction = .creatingCrop(start: point, rect: CGRect(origin: point, size: .zero))
         case .select:
             break
         }
@@ -345,69 +353,55 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard state.hasImage, let start = dragStartImagePoint else { return }
+        guard state.hasImage else { return }
         let point = imagePoint(for: event.locationInWindow).clampedToImage(size: state.imageSize)
 
-        if let resizingAnnotation, let resizingHandle {
-            if !recordedMoveUndo {
+        switch interaction {
+        case .idle:
+            return
+        case let .resizing(annotation, handle, didRecordUndo):
+            if !didRecordUndo {
                 state.recordUndoSnapshot()
-                recordedMoveUndo = true
+                interaction = .resizing(annotation: annotation, handle: handle, didRecordUndo: true)
             }
-            if let arrow = resizingAnnotation as? ArrowAnnotation {
-                if resizingHandle == .arrowStart {
-                    arrow.start = point
-                } else if resizingHandle == .arrowEnd {
-                    arrow.end = point
-                }
-            } else {
-                resizingAnnotation.bounds = AnnotationSelectionGeometry.resizedRect(resizingAnnotation.bounds, moving: resizingHandle, to: point)
+            if AnnotationSelectionGeometry.applyResize(annotation: annotation, handle: handle, to: point), annotation is TextAnnotation {
                 repositionActiveTextField()
             }
-            needsDisplay = true
-            return
-        }
-
-        if let movingAnnotation, let lastMovePoint {
-            if !recordedMoveUndo {
+        case let .moving(annotation, lastPoint, didRecordUndo):
+            if !didRecordUndo {
                 state.recordUndoSnapshot()
-                recordedMoveUndo = true
+                interaction = .moving(annotation: annotation, lastPoint: lastPoint, didRecordUndo: true)
             }
-            movingAnnotation.moveBy(dx: point.x - lastMovePoint.x, dy: point.y - lastMovePoint.y)
-            self.lastMovePoint = point
-            needsDisplay = true
-            return
-        }
-
-        let rect = CGRect(x: start.x, y: start.y, width: point.x - start.x, height: point.y - start.y).normalized
-        if let arrow = activeAnnotation as? ArrowAnnotation {
-            arrow.end = point
-        } else if let annotation = activeAnnotation {
-            annotation.bounds = rect
-        } else if state.selectedTool == .crop {
-            activeCropRect = rect
+            annotation.moveBy(dx: point.x - lastPoint.x, dy: point.y - lastPoint.y)
+            interaction = .moving(annotation: annotation, lastPoint: point, didRecordUndo: true)
+        case let .creatingAnnotation(start, annotation):
+            let rect = CGRect(x: start.x, y: start.y, width: point.x - start.x, height: point.y - start.y).normalized
+            if let arrow = annotation as? ArrowAnnotation {
+                arrow.end = point
+            } else {
+                annotation.bounds = rect
+            }
+        case let .creatingCrop(start, _):
+            let rect = CGRect(x: start.x, y: start.y, width: point.x - start.x, height: point.y - start.y).normalized
+            interaction = .creatingCrop(start: start, rect: rect)
         }
         needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
         defer {
-            activeAnnotation = nil
-            dragStartImagePoint = nil
-            movingAnnotation = nil
-            resizingAnnotation = nil
-            resizingHandle = nil
-            lastMovePoint = nil
-            activeCropRect = nil
+            interaction = .idle
             needsDisplay = true
         }
 
-        if let annotation = activeAnnotation, annotation.bounds.width > 4 || annotation.bounds.height > 4 {
+        if case let .creatingAnnotation(_, annotation) = interaction,
+           annotation.bounds.width > 4 || annotation.bounds.height > 4 {
             state.addAnnotation(annotation, select: false)
             statusHandler?("Added \(state.selectedTool.rawValue) annotation")
             return
         }
 
-        if let crop = activeCropRect, crop.width > 4, crop.height > 4 {
+        if case let .creatingCrop(_, crop) = interaction, crop.width > 4, crop.height > 4 {
             state.applyCrop(crop)
             centerImage()
             statusHandler?("Cropped image")
@@ -415,33 +409,6 @@ final class AnnotationCanvasView: NSView, NSTextFieldDelegate {
     }
 
     override var mouseDownCanMoveWindow: Bool { false }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 51 {
-            state.deleteSelectedAnnotation()
-            needsDisplay = true
-        } else if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command),
-                  let key = event.charactersIgnoringModifiers?.lowercased(),
-                  key == "z" {
-            if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.shift) {
-                _ = state.redo()
-                statusHandler?("Redo")
-            } else {
-                _ = state.undo()
-                statusHandler?("Undo")
-            }
-            activeAnnotation = nil
-            activeCropRect = nil
-            repositionActiveTextField()
-            needsDisplay = true
-        } else if event.keyCode == 53 {
-            state.selectedTool = .select
-            toolDidChange()
-            statusHandler?("Tool: select")
-        } else {
-            super.keyDown(with: event)
-        }
-    }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         .copy

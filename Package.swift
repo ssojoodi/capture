@@ -2,23 +2,23 @@
 import PackageDescription
 
 let package = Package(
-    name: "SkitchEquivalent",
+    name: "Capture",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .library(name: "SkitchEquivalentCore", targets: ["SkitchEquivalentCore"]),
-        .executable(name: "SkitchEquivalent", targets: ["SkitchEquivalentApp"])
+        .library(name: "CaptureCore", targets: ["CaptureCore"]),
+        .executable(name: "Capture", targets: ["CaptureApp"])
     ],
     targets: [
-        .target(name: "SkitchEquivalentCore"),
+        .target(name: "CaptureCore"),
         .executableTarget(
-            name: "SkitchEquivalentApp",
-            dependencies: ["SkitchEquivalentCore"]
+            name: "CaptureApp",
+            dependencies: ["CaptureCore"]
         ),
         .testTarget(
-            name: "SkitchEquivalentCoreTests",
-            dependencies: ["SkitchEquivalentCore"]
+            name: "CaptureCoreTests",
+            dependencies: ["CaptureCore"]
         )
     ]
 )

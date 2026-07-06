@@ -1,5 +1,5 @@
 import AppKit
-import SkitchEquivalentCore
+import CaptureCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: MainWindowController?

@@ -27,7 +27,11 @@ public final class AnnotationDocumentState {
     public var hasImage: Bool { baseImage != nil }
     public var canUndo: Bool { !undoStack.isEmpty }
     public var canRedo: Bool { !redoStack.isEmpty }
+}
 
+// MARK: - Image and annotation commands
+
+extension AnnotationDocumentState {
     public func load(image: NSImage) {
         baseImage = image
         baseCGImage = image.cgImageForRendering()
@@ -71,15 +75,19 @@ public final class AnnotationDocumentState {
         guard let annotation = annotation(with: selectedAnnotationID) else { return false }
         switch annotation {
         case let arrow as ArrowAnnotation:
+            guard !colorsMatch(arrow.color, color) else { return false }
             recordUndoSnapshot()
             arrow.color = color
         case let text as TextAnnotation:
+            guard !colorsMatch(text.textColor, color) else { return false }
             recordUndoSnapshot()
             text.textColor = color
         case let rectangle as RectangleAnnotation:
+            guard !colorsMatch(rectangle.strokeColor, color) else { return false }
             recordUndoSnapshot()
             rectangle.strokeColor = color
         case let ellipse as EllipseAnnotation:
+            guard !colorsMatch(ellipse.strokeColor, color) else { return false }
             recordUndoSnapshot()
             ellipse.strokeColor = color
         default:
@@ -93,12 +101,15 @@ public final class AnnotationDocumentState {
         guard let annotation = annotation(with: selectedAnnotationID) else { return false }
         switch annotation {
         case let arrow as ArrowAnnotation:
+            guard arrow.strokeWidth != thickness else { return false }
             recordUndoSnapshot()
             arrow.strokeWidth = thickness
         case let rectangle as RectangleAnnotation:
+            guard rectangle.strokeWidth != thickness else { return false }
             recordUndoSnapshot()
             rectangle.strokeWidth = thickness
         case let ellipse as EllipseAnnotation:
+            guard ellipse.strokeWidth != thickness else { return false }
             recordUndoSnapshot()
             ellipse.strokeWidth = thickness
         default:
@@ -110,22 +121,19 @@ public final class AnnotationDocumentState {
     @discardableResult
     public func resizeSelected(handle: SelectionHandle, to point: CGPoint) -> Bool {
         guard let annotation = annotation(with: selectedAnnotationID) else { return false }
-        recordUndoSnapshot()
-        if let arrow = annotation as? ArrowAnnotation {
-            switch handle {
-            case .arrowStart:
-                arrow.start = point
-            case .arrowEnd:
-                arrow.end = point
-            default:
-                return false
-            }
+        if annotation is ArrowAnnotation {
+            guard handle == .arrowStart || handle == .arrowEnd else { return false }
         } else {
-            annotation.bounds = AnnotationSelectionGeometry.resizedRect(annotation.bounds, moving: handle, to: point)
+            guard handle != .arrowStart, handle != .arrowEnd else { return false }
         }
-        return true
+        recordUndoSnapshot()
+        return AnnotationSelectionGeometry.applyResize(annotation: annotation, handle: handle, to: point)
     }
+}
 
+// MARK: - Crop commands
+
+extension AnnotationDocumentState {
     public func setCropRect(_ rect: CGRect?) {
         recordUndoSnapshot()
         guard let rect else {
@@ -154,7 +162,11 @@ public final class AnnotationDocumentState {
         cropRect = nil
         selectedAnnotationID = nil
     }
+}
 
+// MARK: - Undo and redo
+
+extension AnnotationDocumentState {
     public func recordUndoSnapshot() {
         undoStack.append(snapshot())
         if undoStack.count > historyLimit {
@@ -178,7 +190,11 @@ public final class AnnotationDocumentState {
         restore(next)
         return true
     }
+}
 
+// MARK: - Snapshot internals
+
+private extension AnnotationDocumentState {
     private func snapshot() -> DocumentSnapshot {
         DocumentSnapshot(
             baseImage: baseImage,
@@ -199,6 +215,20 @@ public final class AnnotationDocumentState {
         selectedAnnotationID = snapshot.selectedAnnotationID
     }
 
+    private func colorsMatch(_ lhs: NSColor, _ rhs: NSColor) -> Bool {
+        guard let left = lhs.usingColorSpace(.sRGB), let right = rhs.usingColorSpace(.sRGB) else {
+            return lhs == rhs
+        }
+        return abs(left.redComponent - right.redComponent) < 0.0001
+            && abs(left.greenComponent - right.greenComponent) < 0.0001
+            && abs(left.blueComponent - right.blueComponent) < 0.0001
+            && abs(left.alphaComponent - right.alphaComponent) < 0.0001
+    }
+}
+
+// MARK: - Rendered output
+
+extension AnnotationDocumentState {
     public func flattenedImage() -> NSImage? {
         guard hasImage else { return nil }
         return ImageRenderer.render(state: self)

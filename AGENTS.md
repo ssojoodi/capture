@@ -55,7 +55,7 @@ Expected goal milestones:
 - Read the current timestamped plan.
 - Implement the smallest coherent product slice from that plan.
 - Add or update focused automated tests where behavior can be isolated.
-- Run `xcrun xcodebuild -project SkitchEquivalent.xcodeproj -scheme SkitchEquivalent -destination 'platform=macOS' -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO test`.
+- Run `xcrun xcodebuild -project Capture.xcodeproj -scheme Capture -destination 'platform=macOS' -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO test`.
 - Launch the built `Capture.app`.
 - Capture a verification screenshot under `artifacts/verification/`.
 - Commit the plan and implementation with short, meaningful commit messages.
@@ -63,7 +63,7 @@ Expected goal milestones:
 
 ## Current Architecture Notes
 
-- Internals may still use `SkitchEquivalent` names for project/module targets.
+- Internals may still use `Capture` names for project/module targets.
 - Product-facing naming should stay `Capture`.
 - The canvas is AppKit/Core Graphics based.
 - Annotation coordinates should remain in image space so zoom does not reduce export fidelity.

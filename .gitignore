@@ -2,3 +2,6 @@
 DerivedData/
 xcuserdata/
 .DS_Store
+release.env
+
+docs/
