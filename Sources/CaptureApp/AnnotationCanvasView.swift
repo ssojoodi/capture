@@ -2,7 +2,7 @@ import AppKit
 import UniformTypeIdentifiers
 import CaptureCore
 
-final class AnnotationCanvasView: NSView, NSTextViewDelegate {
+final class AnnotationCanvasView: NSView {
     private enum CanvasInteraction {
         case idle
         case creatingAnnotation(start: CGPoint, annotation: Annotation)
@@ -18,12 +18,12 @@ final class AnnotationCanvasView: NSView, NSTextViewDelegate {
     private var currentColor: NSColor = CapturePalette.softRed
     private var currentLineThickness: CGFloat = 7
     private var currentTextSize: CGFloat = 52
-    private weak var activeTextView: NSTextView?
+    private var activeTextEditor: TextAnnotationEditorView?
     private weak var activeTextAnnotation: TextAnnotation?
     private var activeTextWasNew = false
     private var activeTextDidRecordUndo = false
     private let defaultTextAnnotationSize = CGSize(width: 260, height: 76)
-    var isEditingText: Bool { activeTextView != nil }
+    var isEditingText: Bool { activeTextEditor != nil }
     var statusHandler: ((String) -> Void)?
 
     init(state: AnnotationDocumentState) {
@@ -49,7 +49,7 @@ final class AnnotationCanvasView: NSView, NSTextViewDelegate {
 
     func cancelInteraction() {
         interaction = .idle
-        repositionActiveTextField()
+        repositionActiveTextEditor()
         needsDisplay = true
     }
 
@@ -59,7 +59,7 @@ final class AnnotationCanvasView: NSView, NSTextViewDelegate {
         let available = bounds.insetBy(dx: inset, dy: inset).size
         zoom = max(0.05, min(available.width / state.imageSize.width, available.height / state.imageSize.height, 1))
         centerImage()
-        repositionActiveTextField()
+        repositionActiveTextEditor()
         needsDisplay = true
         statusHandler?("Zoom: fit (\(zoomPercentage)%)")
     }
@@ -78,7 +78,7 @@ final class AnnotationCanvasView: NSView, NSTextViewDelegate {
         let viewport = ViewportTransform(zoom: zoom, imageOrigin: imageOrigin).zoomed(to: 1, aroundViewPoint: center)
         zoom = viewport.zoom
         imageOrigin = viewport.imageOrigin
-        repositionActiveTextField()
+        repositionActiveTextEditor()
         needsDisplay = true
         statusHandler?("Zoom: 100%")
     }
@@ -90,7 +90,7 @@ final class AnnotationCanvasView: NSView, NSTextViewDelegate {
         let viewport = ViewportTransform(zoom: zoom, imageOrigin: imageOrigin).zoomed(to: nextZoom, aroundViewPoint: center)
         zoom = viewport.zoom
         imageOrigin = viewport.imageOrigin
-        repositionActiveTextField()
+        repositionActiveTextEditor()
         needsDisplay = true
         statusHandler?("Zoom: \(zoomPercentage)%")
     }
@@ -100,7 +100,7 @@ final class AnnotationCanvasView: NSView, NSTextViewDelegate {
         if state.hasImage, zoom <= 1 {
             centerImage()
         }
-        repositionActiveTextField()
+        repositionActiveTextEditor()
     }
 
     override func resetCursorRects() {
@@ -338,100 +338,75 @@ final class AnnotationCanvasView: NSView, NSTextViewDelegate {
     }
 
     private func beginEditing(_ annotation: TextAnnotation, isNew: Bool = false) {
-        activeTextView?.removeFromSuperview()
-        let field = NSTextView(frame: viewRect(forImageRect: annotation.bounds))
-        field.string = annotation.text
-        field.font = .boldSystemFont(ofSize: max(16, annotation.fontSize * zoom))
-        field.textColor = annotation.textColor
-        field.backgroundColor = annotation.drawsBackground ? annotation.backgroundColor : .clear
-        field.drawsBackground = annotation.drawsBackground
-        field.isRichText = false
-        field.importsGraphics = false
-        field.allowsUndo = true
-        field.isEditable = true
-        field.isSelectable = true
-        field.isHorizontallyResizable = true
-        field.isVerticallyResizable = true
-        field.maxSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        field.alignment = .center
-        field.delegate = self
-        field.textContainerInset = CGSize(width: 10 * zoom, height: 6 * zoom)
-        field.textContainer?.lineFragmentPadding = 0
-        field.textContainer?.widthTracksTextView = false
-        field.textContainer?.containerSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        addSubview(field)
-        activeTextView = field
+        activeTextEditor?.removeFromSuperview()
+        let editor = TextAnnotationEditorView(
+            frame: viewRect(forImageRect: annotation.bounds),
+            text: annotation.text,
+            font: textEditorFont(for: annotation),
+            textColor: annotation.textColor,
+            backgroundColor: annotation.backgroundColor,
+            drawsBackground: annotation.drawsBackground
+        )
+        editor.onTextChanged = { [weak self] _, size in
+            self?.resizeActiveTextAnnotation(toViewSize: size)
+        }
+        editor.onEditingEnded = { [weak self] _, _ in
+            self?.commitActiveTextEdit()
+        }
+        addSubview(editor)
+        activeTextEditor = editor
         activeTextAnnotation = annotation
         activeTextWasNew = isNew
         activeTextDidRecordUndo = false
-        resizeActiveTextFieldToFitContent()
-        window?.makeFirstResponder(field)
-    }
-
-    @objc private func commitActiveTextEditAction(_ sender: Any?) {
-        commitActiveTextEdit()
-    }
-
-    func textDidEndEditing(_ notification: Notification) {
-        commitActiveTextEdit()
-    }
-
-    func textDidChange(_ notification: Notification) {
-        resizeActiveTextFieldToFitContent()
+        editor.focusAtEnd()
     }
 
     private func commitActiveTextEdit() {
-        guard let field = activeTextView else { return }
+        guard let editor = activeTextEditor else { return }
+        editor.onTextChanged = nil
+        editor.onEditingEnded = nil
+
         if let annotation = activeTextAnnotation {
-            let text = field.string.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = editor.text
             if text != annotation.text {
                 recordActiveTextUndoIfNeeded()
                 annotation.text = text
             }
         }
-        field.removeFromSuperview()
-        activeTextView = nil
+        editor.removeFromSuperview()
+        activeTextEditor = nil
         activeTextAnnotation = nil
         activeTextWasNew = false
         activeTextDidRecordUndo = false
         needsDisplay = true
     }
 
-    private func repositionActiveTextField() {
-        guard let field = activeTextView, let annotation = activeTextAnnotation else { return }
-        field.frame = viewRect(forImageRect: annotation.bounds)
-        field.font = .boldSystemFont(ofSize: max(16, annotation.fontSize * zoom))
-        field.textContainerInset = CGSize(width: 10 * zoom, height: 6 * zoom)
-        field.textContainer?.widthTracksTextView = false
-        field.textContainer?.containerSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+    private func repositionActiveTextEditor() {
+        guard let editor = activeTextEditor, let annotation = activeTextAnnotation else { return }
+        editor.updateFrame(
+            viewRect(forImageRect: annotation.bounds),
+            font: textEditorFont(for: annotation),
+            textColor: annotation.textColor,
+            backgroundColor: annotation.backgroundColor,
+            drawsBackground: annotation.drawsBackground
+        )
     }
 
-    private func resizeActiveTextFieldToFitContent() {
-        guard let field = activeTextView, let annotation = activeTextAnnotation else { return }
-        let font = NSFont.boldSystemFont(ofSize: max(16, annotation.fontSize * zoom))
-        let text = field.string.isEmpty ? "Text" : field.string
-        let measured = NSString(string: text).boundingRect(
-            with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: font]
-        )
-        let neededSize = CGSize(
-            width: ceil((measured.width + 32 * zoom) / zoom),
-            height: ceil((measured.height + 20 * zoom) / zoom)
-        )
-        let newSize = CGSize(
-            width: max(annotation.bounds.width, neededSize.width),
-            height: max(annotation.bounds.height, neededSize.height)
-        )
-        guard newSize != annotation.bounds.size else {
-            repositionActiveTextField()
-            return
-        }
-
+    private func resizeActiveTextAnnotation(toViewSize viewSize: CGSize) {
+        guard let annotation = activeTextAnnotation else { return }
+        let newSize = imageSize(forViewSize: viewSize)
+        guard newSize != annotation.bounds.size else { return }
         recordActiveTextUndoIfNeeded()
         annotation.bounds.size = newSize
-        repositionActiveTextField()
         needsDisplay = true
+    }
+
+    private func textEditorFont(for annotation: TextAnnotation) -> NSFont {
+        .boldSystemFont(ofSize: max(16, annotation.fontSize * zoom))
+    }
+
+    private func imageSize(forViewSize viewSize: CGSize) -> CGSize {
+        CGSize(width: ceil(viewSize.width / zoom), height: ceil(viewSize.height / zoom))
     }
 
     private func recordActiveTextUndoIfNeeded() {
@@ -453,7 +428,7 @@ final class AnnotationCanvasView: NSView, NSTextViewDelegate {
                 interaction = .resizing(annotation: annotation, handle: handle, didRecordUndo: true)
             }
             if AnnotationSelectionGeometry.applyResize(annotation: annotation, handle: handle, to: point), annotation is TextAnnotation {
-                repositionActiveTextField()
+                repositionActiveTextEditor()
             }
         case let .moving(annotation, lastPoint, didRecordUndo):
             if !didRecordUndo {
@@ -561,7 +536,7 @@ final class AnnotationCanvasView: NSView, NSTextViewDelegate {
         let selectedIsText = state.annotation(with: state.selectedAnnotationID) is TextAnnotation
         let size = selectedIsText ? textSize : lineThickness
         if state.applyThicknessToSelected(size) {
-            repositionActiveTextField()
+            repositionActiveTextEditor()
             if selectedIsText {
                 statusHandler?("Changed font size")
             } else {
