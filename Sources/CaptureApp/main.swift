@@ -14,6 +14,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        windowController?.canTerminate() == false ? .terminateCancel : .terminateNow
+    }
 }
 
 let app = NSApplication.shared

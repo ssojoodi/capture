@@ -1,5 +1,10 @@
 import AppKit
 
+public enum RasterImageFormat {
+    case jpeg
+    case png
+}
+
 public final class AnnotationDocumentState {
     private struct DocumentSnapshot {
         let baseImage: NSImage?
@@ -8,6 +13,7 @@ public final class AnnotationDocumentState {
         let annotations: [Annotation]
         let cropRect: CGRect?
         let selectedAnnotationID: UUID?
+        let revisionID: UUID
     }
 
     private let historyLimit = 50
@@ -21,6 +27,8 @@ public final class AnnotationDocumentState {
     public var selectedAnnotationID: UUID?
     public var annotations: [Annotation] = []
     public private(set) var cropRect: CGRect?
+    public private(set) var revisionID = UUID()
+    public var revisionDidChange: ((UUID) -> Void)?
 
     public init() {}
 
@@ -46,6 +54,8 @@ extension AnnotationDocumentState {
         selectedTool = .select
         undoStack.removeAll()
         redoStack.removeAll()
+        revisionID = UUID()
+        revisionDidChange?(revisionID)
     }
 
     public func addAnnotation(_ annotation: Annotation, select: Bool = true) {
@@ -88,12 +98,12 @@ extension AnnotationDocumentState {
             bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
         ) else { return }
 
-        recordUndoSnapshot()
         context.interpolationQuality = .high
         context.setBlendMode(.copy)
         context.draw(originalCGImage, in: imageBounds)
         context.draw(blurred, in: normalized)
         guard let updated = context.makeImage() else { return }
+        recordUndoSnapshot()
         baseCGImage = updated
         baseImage = NSImage(cgImage: updated, size: imageSize)
         selectedAnnotationID = nil
@@ -206,6 +216,8 @@ extension AnnotationDocumentState {
             undoStack.removeFirst(undoStack.count - historyLimit)
         }
         redoStack.removeAll()
+        revisionID = UUID()
+        revisionDidChange?(revisionID)
     }
 
     @discardableResult
@@ -213,6 +225,7 @@ extension AnnotationDocumentState {
         guard let previous = undoStack.popLast() else { return false }
         redoStack.append(snapshot())
         restore(previous)
+        revisionDidChange?(revisionID)
         return true
     }
 
@@ -221,6 +234,7 @@ extension AnnotationDocumentState {
         guard let next = redoStack.popLast() else { return false }
         undoStack.append(snapshot())
         restore(next)
+        revisionDidChange?(revisionID)
         return true
     }
 }
@@ -235,7 +249,8 @@ private extension AnnotationDocumentState {
             imageSize: imageSize,
             annotations: annotations.map { $0.copyAnnotation() },
             cropRect: cropRect,
-            selectedAnnotationID: selectedAnnotationID
+            selectedAnnotationID: selectedAnnotationID,
+            revisionID: revisionID
         )
     }
 
@@ -246,6 +261,7 @@ private extension AnnotationDocumentState {
         annotations = snapshot.annotations.map { $0.copyAnnotation() }
         cropRect = snapshot.cropRect
         selectedAnnotationID = snapshot.selectedAnnotationID
+        revisionID = snapshot.revisionID
     }
 
     private func colorsMatch(_ lhs: NSColor, _ rhs: NSColor) -> Bool {
@@ -267,10 +283,19 @@ extension AnnotationDocumentState {
         return ImageRenderer.render(state: self)
     }
 
-    public func jpegData(quality: CGFloat = 0.9) -> Data? {
+    public func imageData(format: RasterImageFormat, jpegQuality: CGFloat = 0.9) -> Data? {
         guard let image = flattenedImage(), let cgImage = image.cgImageForRendering() else { return nil }
         let rep = NSBitmapImageRep(cgImage: cgImage)
-        return rep.representation(using: .jpeg, properties: [.compressionFactor: quality])
+        switch format {
+        case .jpeg:
+            return rep.representation(using: .jpeg, properties: [.compressionFactor: jpegQuality])
+        case .png:
+            return rep.representation(using: .png, properties: [:])
+        }
+    }
+
+    public func jpegData(quality: CGFloat = 0.9) -> Data? {
+        imageData(format: .jpeg, jpegQuality: quality)
     }
 }
 

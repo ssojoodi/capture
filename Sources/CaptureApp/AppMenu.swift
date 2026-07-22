@@ -18,6 +18,10 @@ enum AppMenu {
 
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(withTitle: "Open...", action: #selector(MainWindowController.openImage(_:)), keyEquivalent: "o")
+        fileMenu.addItem(withTitle: "Save", action: #selector(MainWindowController.save(_:)), keyEquivalent: "s")
+        let saveAsItem = fileMenu.addItem(withTitle: "Save As...", action: #selector(MainWindowController.saveAs(_:)), keyEquivalent: "s")
+        saveAsItem.keyEquivalentModifierMask = [.command, .shift]
+        fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(withTitle: "Export JPG...", action: #selector(MainWindowController.exportJPG(_:)), keyEquivalent: "e")
         fileItem.submenu = fileMenu
 

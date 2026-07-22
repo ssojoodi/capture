@@ -1,16 +1,21 @@
 import AppKit
 import CaptureCore
+import UniformTypeIdentifiers
 
-final class MainWindowController: NSWindowController, NSToolbarDelegate {
+final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
     private let state = AnnotationDocumentState()
     private let canvasView: AnnotationCanvasView
     private let statusLabel = NSTextField(labelWithString: "Open, paste, or drop an image to start")
     private var keyMonitor: Any?
+    private var sourceURL: URL?
+    private var sourceFormat: RasterImageFormat?
+    private var savedRevisionID: UUID?
 
     private enum ToolbarID {
         static let toolbar = NSToolbar.Identifier("Capture.toolbar")
         static let open = NSToolbarItem.Identifier("open")
         static let paste = NSToolbarItem.Identifier("paste")
+        static let save = NSToolbarItem.Identifier("save")
         static let copy = NSToolbarItem.Identifier("copy")
         static let export = NSToolbarItem.Identifier("export")
         static let undo = NSToolbarItem.Identifier("undo")
@@ -33,6 +38,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         [
             ToolbarSpec(identifier: ToolbarID.open, label: "Open", symbol: "folder", action: #selector(openImage(_:))),
             ToolbarSpec(identifier: ToolbarID.paste, label: "Paste", symbol: "doc.on.clipboard", action: #selector(pasteImage(_:))),
+            ToolbarSpec(identifier: ToolbarID.save, label: "Save", symbol: "square.and.arrow.down", action: #selector(save(_:))),
             ToolbarSpec(identifier: ToolbarID.copy, label: "Copy", symbol: "doc.on.doc", action: #selector(copyFlattenedImage(_:))),
             ToolbarSpec(identifier: ToolbarID.export, label: "Export JPG", symbol: "square.and.arrow.down", action: #selector(exportJPG(_:))),
             ToolbarSpec(identifier: ToolbarID.undo, label: "Undo", symbol: "arrow.uturn.backward", action: #selector(undo(_:))),
@@ -64,10 +70,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         window.titleVisibility = .visible
         window.minSize = NSSize(width: 760, height: 520)
         super.init(window: window)
+        window.delegate = self
         window.contentView = makeContentView()
         window.toolbar = makeToolbar()
         installKeyMonitor()
         canvasView.statusHandler = { [weak self] text in self?.statusLabel.stringValue = text }
+        canvasView.droppedFileHandler = { [weak self] url in self?.openDroppedFile(url) ?? false }
+        canvasView.droppedImageHandler = { [weak self] image in self?.replaceWithImage(image, sourceURL: nil, message: "Dropped image") ?? false }
+        state.revisionDidChange = { [weak self] _ in self?.updateDocumentPresentation() }
     }
 
     required init?(coder: NSCoder) { nil }
@@ -93,6 +103,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
                 case "v" where hasShift: self.pasteImage(nil); return nil
                 case "c" where hasShift: self.copyFlattenedImage(nil); return nil
                 case "e": self.exportJPG(nil); return nil
+                case "s" where hasShift: self.saveAs(nil); return nil
+                case "s": self.save(nil); return nil
                 case "z":
                     if hasShift {
                         self.redo(nil)
@@ -160,6 +172,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         [
             ToolbarID.open,
             ToolbarID.paste,
+            ToolbarID.save,
             .space,
             NSToolbarItem.Identifier(Tool.select.rawValue),
             NSToolbarItem.Identifier(Tool.arrow.rawValue),
@@ -310,14 +323,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         if panel.runModal() == .OK, let url = panel.url, let image = NSImage(contentsOf: url) {
-            load(image: image, message: "Opened \(url.lastPathComponent)")
+            _ = replaceWithImage(image, sourceURL: url, message: "Opened \(url.lastPathComponent)")
         }
     }
 
     @objc func pasteImage(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
         if let image = NSImage(pasteboard: pasteboard) {
-            load(image: image, message: "Pasted image from clipboard")
+            _ = replaceWithImage(image, sourceURL: nil, message: "Pasted image from clipboard")
         } else {
             statusLabel.stringValue = "Clipboard does not contain an image"
         }
@@ -332,6 +345,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         pasteboard.clearContents()
         pasteboard.writeObjects([image])
         statusLabel.stringValue = "Copied flattened image"
+    }
+
+    @objc func save(_ sender: Any?) {
+        _ = saveCurrentImage()
+    }
+
+    @objc func saveAs(_ sender: Any?) {
+        _ = saveAsCurrentImage()
     }
 
     @objc func exportJPG(_ sender: Any?) {
@@ -358,10 +379,155 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         canvasView.needsDisplay = true
     }
 
-    private func load(image: NSImage, message: String) {
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        confirmDiscardOrSaveChanges()
+    }
+
+    func canTerminate() -> Bool {
+        confirmDiscardOrSaveChanges()
+    }
+
+    private var hasUnsavedChanges: Bool {
+        state.hasImage && savedRevisionID != state.revisionID
+    }
+
+    private func replaceWithImage(_ image: NSImage, sourceURL: URL?, message: String) -> Bool {
+        guard confirmDiscardOrSaveChanges() else { return false }
+        load(image: image, sourceURL: sourceURL, message: message)
+        return true
+    }
+
+    private func openDroppedFile(_ url: URL) -> Bool {
+        guard let image = NSImage(contentsOf: url) else {
+            statusLabel.stringValue = "Could not open \(url.lastPathComponent)"
+            return false
+        }
+        return replaceWithImage(image, sourceURL: url, message: "Opened \(url.lastPathComponent)")
+    }
+
+    private func load(image: NSImage, sourceURL: URL?, message: String) {
+        self.sourceURL = sourceURL
+        sourceFormat = sourceURL.flatMap(RasterImageFormat.init(url:))
         state.load(image: image)
+        savedRevisionID = state.revisionID
         canvasView.zoomToFit()
         canvasView.needsDisplay = true
         statusLabel.stringValue = message
+        updateDocumentPresentation()
+    }
+
+    private func saveCurrentImage() -> Bool {
+        canvasView.commitTextEditing()
+        guard state.hasImage else {
+            statusLabel.stringValue = "Nothing to save"
+            return false
+        }
+        guard let sourceURL, let sourceFormat else {
+            return saveAsCurrentImage()
+        }
+        guard hasUnsavedChanges else {
+            statusLabel.stringValue = "No changes to save"
+            return true
+        }
+        return writeFlattenedImage(to: sourceURL, format: sourceFormat)
+    }
+
+    private func saveAsCurrentImage() -> Bool {
+        canvasView.commitTextEditing()
+        guard state.hasImage else {
+            statusLabel.stringValue = "Nothing to save"
+            return false
+        }
+
+        let defaultFormat = sourceFormat ?? .png
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.png, .jpeg]
+        panel.nameFieldStringValue = suggestedSaveName(format: defaultFormat)
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        guard let format = RasterImageFormat(url: url) else {
+            presentSaveError("Choose a .png, .jpg, or .jpeg filename.")
+            return false
+        }
+        return writeFlattenedImage(to: url, format: format)
+    }
+
+    private func writeFlattenedImage(to url: URL, format: RasterImageFormat) -> Bool {
+        guard let data = state.imageData(format: format) else {
+            presentSaveError("Capture could not render this image for saving.")
+            return false
+        }
+        do {
+            try data.write(to: url, options: .atomic)
+            sourceURL = url
+            sourceFormat = format
+            savedRevisionID = state.revisionID
+            statusLabel.stringValue = "Saved \(url.lastPathComponent)"
+            updateDocumentPresentation()
+            return true
+        } catch {
+            presentSaveError("Could not save \(url.lastPathComponent): \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func suggestedSaveName(format: RasterImageFormat) -> String {
+        let baseName = sourceURL?.deletingPathExtension().lastPathComponent ?? "annotation"
+        return "\(baseName).\(format.fileExtension)"
+    }
+
+    private func confirmDiscardOrSaveChanges() -> Bool {
+        canvasView.commitTextEditing()
+        guard hasUnsavedChanges else { return true }
+
+        let alert = NSAlert()
+        alert.messageText = "Save changes to \(sourceURL?.lastPathComponent ?? "image")?"
+        alert.informativeText = "Your annotations will be lost if you do not save them."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Don't Save")
+        alert.addButton(withTitle: "Cancel")
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            return saveCurrentImage()
+        case .alertSecondButtonReturn:
+            savedRevisionID = state.revisionID
+            updateDocumentPresentation()
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func updateDocumentPresentation() {
+        guard let window else { return }
+        window.representedURL = sourceURL
+        window.title = sourceURL?.lastPathComponent ?? AppMenu.appName
+        window.isDocumentEdited = hasUnsavedChanges
+    }
+
+    private func presentSaveError(_ message: String) {
+        statusLabel.stringValue = message
+        let alert = NSAlert()
+        alert.messageText = "Save Failed"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.runModal()
+    }
+}
+
+private extension RasterImageFormat {
+    init?(url: URL) {
+        switch url.pathExtension.lowercased() {
+        case "jpg", "jpeg": self = .jpeg
+        case "png": self = .png
+        default: return nil
+        }
+    }
+
+    var fileExtension: String {
+        switch self {
+        case .jpeg: "jpg"
+        case .png: "png"
+        }
     }
 }
