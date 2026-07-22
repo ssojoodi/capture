@@ -25,6 +25,8 @@ final class AnnotationCanvasView: NSView {
     private let defaultTextAnnotationSize = CGSize(width: 260, height: 76)
     var isEditingText: Bool { activeTextEditor != nil }
     var statusHandler: ((String) -> Void)?
+    var droppedFileHandler: ((URL) -> Bool)?
+    var droppedImageHandler: ((NSImage) -> Bool)?
 
     init(state: AnnotationDocumentState) {
         self.state = state
@@ -62,6 +64,10 @@ final class AnnotationCanvasView: NSView {
         repositionActiveTextEditor()
         needsDisplay = true
         statusHandler?("Zoom: fit (\(zoomPercentage)%)")
+    }
+
+    func commitTextEditing() {
+        commitActiveTextEdit()
     }
 
     func zoomIn() {
@@ -484,19 +490,11 @@ final class AnnotationCanvasView: NSView {
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         let pasteboard = sender.draggingPasteboard
-        if let urlString = pasteboard.string(forType: .fileURL), let url = URL(string: urlString), let image = NSImage(contentsOf: url) {
-            state.load(image: image)
-            zoomToFit()
-            statusHandler?("Opened \(url.lastPathComponent)")
-            needsDisplay = true
-            return true
+        if let urlString = pasteboard.string(forType: .fileURL), let url = URL(string: urlString) {
+            return droppedFileHandler?(url) ?? false
         }
         if let image = NSImage(pasteboard: pasteboard) {
-            state.load(image: image)
-            zoomToFit()
-            statusHandler?("Dropped image")
-            needsDisplay = true
-            return true
+            return droppedImageHandler?(image) ?? false
         }
         return false
     }

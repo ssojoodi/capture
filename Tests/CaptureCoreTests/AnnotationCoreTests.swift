@@ -134,6 +134,41 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertEqual(flattened.size, NSSize(width: 90, height: 70))
     }
 
+    func testPNGEncodingPreservesImageDimensionsAndTransparency() throws {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 80, height: 60, color: .clear))
+
+        let data = try XCTUnwrap(state.imageData(format: .png))
+        let decoded = try XCTUnwrap(NSImage(data: data))
+        XCTAssertEqual(decoded.size, NSSize(width: 80, height: 60))
+        XCTAssertEqual(try XCTUnwrap(decoded.sampleColor(x: 40, y: 30)).alphaComponent, 0, accuracy: 0.001)
+    }
+
+    func testJPEGEncodingProducesDecodableFlattenedImage() throws {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 96, height: 64, color: .systemBlue))
+        state.addAnnotation(RectangleAnnotation(bounds: CGRect(x: 10, y: 10, width: 30, height: 20)))
+
+        let data = try XCTUnwrap(state.imageData(format: .jpeg))
+        let decoded = try XCTUnwrap(NSImage(data: data))
+        XCTAssertEqual(decoded.size, NSSize(width: 96, height: 64))
+    }
+
+    func testRevisionReturnsToSavedValueAfterUndoAndRedoRestoresEdit() {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 100, height: 100, color: .white))
+        let savedRevision = state.revisionID
+
+        state.addAnnotation(RectangleAnnotation(bounds: CGRect(x: 10, y: 10, width: 30, height: 20)))
+        let editedRevision = state.revisionID
+        XCTAssertNotEqual(editedRevision, savedRevision)
+
+        XCTAssertTrue(state.undo())
+        XCTAssertEqual(state.revisionID, savedRevision)
+        XCTAssertTrue(state.redo())
+        XCTAssertEqual(state.revisionID, editedRevision)
+    }
+
     func testBlurChangesPixelsInsideBlurRect() throws {
         let state = AnnotationDocumentState()
         state.load(image: checkerboardImage(width: 80, height: 80, blockSize: 4))
