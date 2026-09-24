@@ -5,7 +5,7 @@ public enum ImageRenderer {
         guard let baseCGImage = state.baseCGImage else { return nil }
         let sourceSize = state.imageSize
         let imageBounds = CGRect(origin: .zero, size: sourceSize)
-        let crop = state.cropRect ?? imageBounds
+        let crop = state.cropRect ?? state.canvasBounds
         let outputSize = crop.size
         guard outputSize.width > 0, outputSize.height > 0 else { return nil }
 
@@ -22,6 +22,14 @@ public enum ImageRenderer {
 
         context.interpolationQuality = .high
         context.translateBy(x: -crop.origin.x, y: -crop.origin.y)
+        // Paint only the extension; keep transparency inside the original image.
+        context.saveGState()
+        context.addRect(crop)
+        context.addRect(imageBounds)
+        context.clip(using: .evenOdd)
+        context.setFillColor(NSColor.white.cgColor)
+        context.fill(crop)
+        context.restoreGState()
         context.draw(baseCGImage, in: imageBounds)
         for annotation in state.annotations where annotation is BlurAnnotation {
             annotation.draw(in: context, baseImage: baseCGImage, imageSize: sourceSize, scale: 1)

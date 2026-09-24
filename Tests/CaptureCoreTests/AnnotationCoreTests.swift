@@ -95,6 +95,46 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertEqual(CGRect(x: 150, y: 50, width: 400, height: 200).fitted(inside: image), image)
     }
 
+    func testExpandedCanvasIncludesNegativeAndPositiveTextBoundsInOutput() throws {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 100, height: 80, color: .blue))
+        state.addAnnotation(TextAnnotation(bounds: CGRect(x: -30, y: -20, width: 20, height: 10), text: "", backgroundColor: .red))
+        state.addAnnotation(TextAnnotation(bounds: CGRect(x: 110, y: 90, width: 20, height: 10), text: "", backgroundColor: .red))
+        XCTAssertEqual(state.canvasBounds, CGRect(x: -30, y: -20, width: 160, height: 120))
+        let output = try XCTUnwrap(state.flattenedImage())
+        XCTAssertEqual(output.size, NSSize(width: 160, height: 120))
+        let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(output.cgImageForRendering()))
+        func pixel(_ x: Int, _ y: Int) -> [UInt] {
+            var result = [UInt](repeating: 0, count: 4)
+            bitmap.getPixel(&result, atX: x, y: y)
+            return result
+        }
+        // Output bitmap rows run top to bottom. Both formerly clipped annotations survive.
+        XCTAssertEqual(pixel(10, 115), [255, 0, 0, 255])
+        XCTAssertEqual(pixel(150, 5), [255, 0, 0, 255])
+        XCTAssertEqual(pixel(70, 55), [0, 0, 255, 255])
+        XCTAssertEqual(pixel(5, 60), [255, 255, 255, 255])
+        for format: RasterImageFormat in [.png, .jpeg] {
+            let data = try XCTUnwrap(state.imageData(format: format))
+            let decoded = try XCTUnwrap(NSBitmapImageRep(data: data))
+            XCTAssertEqual(decoded.pixelsWide, 160)
+            XCTAssertEqual(decoded.pixelsHigh, 120)
+        }
+        XCTAssertTrue(state.undo())
+        XCTAssertEqual(state.canvasBounds, CGRect(x: -30, y: -20, width: 130, height: 100))
+        XCTAssertTrue(state.redo())
+        XCTAssertEqual(state.canvasBounds.size, CGSize(width: 160, height: 120))
+    }
+
+    func testExpandedCanvasIncludesShapeStrokesAndShrinksAfterDeletion() {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 100, height: 100, color: .white))
+        state.addAnnotation(RectangleAnnotation(bounds: CGRect(x: 90, y: 90, width: 20, height: 20), strokeWidth: 12))
+        XCTAssertEqual(state.canvasBounds, CGRect(x: 0, y: 0, width: 117, height: 117))
+        state.deleteSelectedAnnotation()
+        XCTAssertEqual(state.canvasBounds, CGRect(x: 0, y: 0, width: 100, height: 100))
+    }
+
     func testArrowEndpointHandleHitTesting() {
         let arrow = ArrowAnnotation(start: CGPoint(x: 10, y: 20), end: CGPoint(x: 100, y: 140))
         XCTAssertEqual(AnnotationSelectionGeometry.hitHandle(at: CGPoint(x: 12, y: 22), annotation: arrow, hitRadius: 6), .arrowStart)

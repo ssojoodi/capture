@@ -65,7 +65,8 @@ final class AnnotationCanvasView: NSView {
         guard state.imageSize.width > 0, state.imageSize.height > 0 else { return }
         let inset: CGFloat = 72
         let available = bounds.insetBy(dx: inset, dy: inset).size
-        zoom = max(0.05, min(available.width / state.imageSize.width, available.height / state.imageSize.height, 1))
+        let canvasBounds = state.canvasBounds
+        zoom = max(0.05, min(available.width / canvasBounds.width, available.height / canvasBounds.height, 1))
         centerImage()
         repositionActiveTextEditor()
         needsDisplay = true
@@ -143,6 +144,13 @@ final class AnnotationCanvasView: NSView {
         context.translateBy(x: imageOrigin.x, y: imageOrigin.y)
         context.scaleBy(x: zoom, y: zoom)
         let imageRect = CGRect(origin: .zero, size: state.imageSize)
+        context.saveGState()
+        context.addRect(state.canvasBounds)
+        context.addRect(imageRect)
+        context.clip(using: .evenOdd)
+        context.setFillColor(NSColor.white.cgColor)
+        context.fill(state.canvasBounds)
+        context.restoreGState()
         context.draw(baseCGImage, in: imageRect)
 
         let activeAnnotation: Annotation?
@@ -465,8 +473,11 @@ final class AnnotationCanvasView: NSView {
                 state.recordUndoSnapshot()
                 interaction = .resizing(annotation: annotation, handle: handle, didRecordUndo: true)
             }
-            if AnnotationSelectionGeometry.applyResize(annotation: annotation, handle: handle, to: point), annotation is TextAnnotation {
-                annotation.bounds = annotation.bounds.fitted(inside: CGRect(origin: .zero, size: state.imageSize))
+            let resizePoint = state.selectedTool == .select ? rawPoint : point
+            if AnnotationSelectionGeometry.applyResize(annotation: annotation, handle: handle, to: resizePoint), annotation is TextAnnotation {
+                if state.selectedTool != .select {
+                    annotation.bounds = annotation.bounds.fitted(inside: CGRect(origin: .zero, size: state.imageSize))
+                }
                 repositionActiveTextEditor()
             }
         case let .moving(annotation, lastPoint, didRecordUndo):
@@ -475,7 +486,7 @@ final class AnnotationCanvasView: NSView {
                 interaction = .moving(annotation: annotation, lastPoint: lastPoint, didRecordUndo: true)
             }
             annotation.moveBy(dx: rawPoint.x - lastPoint.x, dy: rawPoint.y - lastPoint.y)
-            if annotation is TextAnnotation {
+            if annotation is TextAnnotation && state.selectedTool != .select {
                 annotation.bounds = annotation.bounds.fitted(inside: CGRect(origin: .zero, size: state.imageSize))
             }
             interaction = .moving(annotation: annotation, lastPoint: rawPoint, didRecordUndo: true)
@@ -538,8 +549,8 @@ final class AnnotationCanvasView: NSView {
     private func centerImage() {
         guard state.imageSize.width > 0, state.imageSize.height > 0 else { return }
         imageOrigin = CGPoint(
-            x: (bounds.width - state.imageSize.width * zoom) / 2,
-            y: (bounds.height - state.imageSize.height * zoom) / 2
+            x: bounds.midX - state.canvasBounds.midX * zoom,
+            y: bounds.midY - state.canvasBounds.midY * zoom
         )
     }
 

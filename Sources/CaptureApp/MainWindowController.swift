@@ -426,6 +426,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @objc func copyFlattenedImage(_ sender: Any?) {
+        canvasView.commitTextEditing()
         guard let image = state.flattenedImage() else {
             statusLabel.stringValue = "Nothing to copy"
             return
@@ -445,6 +446,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @objc func exportJPG(_ sender: Any?) {
+        canvasView.commitTextEditing()
         guard let data = state.jpegData() else {
             statusLabel.stringValue = "Nothing to export"
             return

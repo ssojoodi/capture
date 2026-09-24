@@ -161,6 +161,41 @@ enum WindowChecks {
         precondition(state.annotations[0].bounds == CGRect(x: 300, y: 100, width: 80, height: 80),
                      "Off-image corner must resize both dimensions without moving the opposite corner")
 
+        // Select can enlarge and move text beyond the image, including negative coordinates.
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 580, y: 330)))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 680, y: 490)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 680, y: 490)))
+        let enlarged = CGRect(x: 300, y: 100, width: 180, height: 240)
+        precondition(state.annotations[0].bounds == enlarged)
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 550, y: 300)))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 100, y: 100)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 100, y: 100)))
+        precondition(state.annotations[0].bounds == CGRect(x: -150, y: -100, width: 180, height: 240))
+        precondition(state.undo() && state.annotations[0].bounds == enlarged)
+        precondition(state.redo() && state.annotations[0].bounds.minX == -150)
+
+        // Creation stays bounded; resizing that same shape in Select can exceed the image.
+        state.selectedAnnotationID = nil
+        state.selectedTool = .rectangle
+        canvas.toolDidChange()
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 500, y: 350)))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 680, y: 490)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 680, y: 490)))
+        precondition(state.annotations.last!.bounds == CGRect(x: 300, y: 200, width: 100, height: 100))
+        state.selectedTool = .select
+        canvas.toolDidChange()
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 600, y: 450)))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 680, y: 490)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 680, y: 490)))
+        precondition(state.annotations.last!.bounds == CGRect(x: 300, y: 200, width: 180, height: 140))
+        let expandedOutput = state.flattenedImage()!
+        precondition(expandedOutput.size == state.canvasBounds.size, "Output must include the expanded canvas")
+        let outputBitmap = NSBitmapImageRep(cgImage: expandedOutput.cgImageForRendering()!)
+        let artifactDirectory = URL(fileURLWithPath: "artifacts/verification", isDirectory: true)
+        try! FileManager.default.createDirectory(at: artifactDirectory, withIntermediateDirectories: true)
+        try! outputBitmap.representation(using: .png, properties: [:])!
+            .write(to: artifactDirectory.appendingPathComponent("expanded-canvas-output.png"))
+
         let small = TextAnnotationEditorView(frame: CGRect(x: 0, y: 0, width: 60, height: 30), text: longText,
                                             font: .boldSystemFont(ofSize: 12), textColor: .black,
                                             maximumSize: CGSize(width: 60, height: 40), scale: 0.5)
