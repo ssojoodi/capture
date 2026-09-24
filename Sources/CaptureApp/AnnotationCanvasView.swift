@@ -18,6 +18,7 @@ final class AnnotationCanvasView: NSView {
     private var currentColor: NSColor = CapturePalette.softRed
     private var currentLineThickness: CGFloat = 7
     private var currentTextSize: CGFloat = 52
+    private var currentTextBackground = NSColor.black.withAlphaComponent(0.5)
     private var activeTextEditor: TextAnnotationEditorView?
     private weak var activeTextAnnotation: TextAnnotation?
     private var activeTextWasNew = false
@@ -154,8 +155,12 @@ final class AnnotationCanvasView: NSView {
             activeAnnotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
         }
 
-        for annotation in state.annotations where !(annotation is BlurAnnotation) && annotation.id != activeTextAnnotation?.id {
-            annotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
+        for annotation in state.annotations where !(annotation is BlurAnnotation) {
+            if annotation.id == activeTextAnnotation?.id, let text = annotation as? TextAnnotation {
+                text.drawBackground(in: context)
+            } else {
+                annotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
+            }
         }
 
         if let activeAnnotation, !(activeAnnotation is BlurAnnotation) {
@@ -324,7 +329,8 @@ final class AnnotationCanvasView: NSView {
                 text: "",
                 fontSize: currentTextSize,
                 textColor: currentColor,
-                backgroundColor: currentColor
+                backgroundColor: currentTextBackground,
+                drawsBackground: currentTextBackground.alphaComponent > 0
             )
             state.addAnnotation(annotation, select: true)
             beginEditing(annotation, isNew: true)
@@ -349,9 +355,7 @@ final class AnnotationCanvasView: NSView {
             frame: viewRect(forImageRect: annotation.bounds),
             text: annotation.text,
             font: textEditorFont(for: annotation),
-            textColor: annotation.textColor,
-            backgroundColor: annotation.backgroundColor,
-            drawsBackground: annotation.drawsBackground
+            textColor: annotation.textColor
         )
         editor.onTextChanged = { [weak self] _, size in
             self?.resizeActiveTextAnnotation(toViewSize: size)
@@ -392,9 +396,7 @@ final class AnnotationCanvasView: NSView {
         editor.updateFrame(
             viewRect(forImageRect: annotation.bounds),
             font: textEditorFont(for: annotation),
-            textColor: annotation.textColor,
-            backgroundColor: annotation.backgroundColor,
-            drawsBackground: annotation.drawsBackground
+            textColor: annotation.textColor
         )
     }
 
@@ -516,6 +518,24 @@ final class AnnotationCanvasView: NSView {
         let normalized = imageRect.normalized
         let origin = ViewportTransform(zoom: zoom, imageOrigin: imageOrigin).viewPoint(forImagePoint: normalized.origin)
         return CGRect(x: origin.x, y: origin.y, width: normalized.width * zoom, height: normalized.height * zoom)
+    }
+
+    var selectedTextBackground: NSColor {
+        guard let text = state.annotation(with: state.selectedAnnotationID) as? TextAnnotation else {
+            return currentTextBackground
+        }
+        return text.backgroundColor.withAlphaComponent(text.drawsBackground ? text.backgroundColor.alphaComponent : 0)
+    }
+
+    func applySelectedTextBackground(_ color: NSColor) {
+        commitActiveTextEdit()
+        currentTextBackground = color
+        if state.applyTextBackgroundToSelected(color) {
+            statusHandler?("Changed text background")
+            needsDisplay = true
+        } else {
+            statusHandler?("Text background selected")
+        }
     }
 
     func applySelectedColor(_ color: NSColor) {

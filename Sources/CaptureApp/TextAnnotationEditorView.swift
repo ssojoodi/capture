@@ -17,9 +17,7 @@ final class TextAnnotationEditorView: NSScrollView, NSTextViewDelegate {
         frame: CGRect,
         text: String,
         font: NSFont,
-        textColor: NSColor,
-        backgroundColor: NSColor,
-        drawsBackground: Bool
+        textColor: NSColor
     ) {
         textView = NSTextView(frame: CGRect(origin: .zero, size: frame.size))
         minimumContentSize = frame.size
@@ -28,15 +26,14 @@ final class TextAnnotationEditorView: NSScrollView, NSTextViewDelegate {
         borderType = .noBorder
         hasHorizontalScroller = false
         hasVerticalScroller = false
-        self.drawsBackground = drawsBackground
-        self.backgroundColor = drawsBackground ? backgroundColor : .clear
+        // The canvas paints the annotation background once, beneath this editor.
+        drawsBackground = false
+        contentView.drawsBackground = false
 
         configureTextView(
             text: text,
             font: font,
-            textColor: textColor,
-            backgroundColor: backgroundColor,
-            drawsBackground: drawsBackground
+            textColor: textColor
         )
         documentView = textView
         resizeToFitContent()
@@ -56,18 +53,12 @@ final class TextAnnotationEditorView: NSScrollView, NSTextViewDelegate {
     func updateFrame(
         _ frame: CGRect,
         font: NSFont,
-        textColor: NSColor,
-        backgroundColor: NSColor,
-        drawsBackground: Bool
+        textColor: NSColor
     ) {
         setFrameOrigin(frame.origin)
         minimumContentSize = frame.size
         textView.font = font
         textView.textColor = textColor
-        textView.backgroundColor = backgroundColor
-        textView.drawsBackground = drawsBackground
-        self.drawsBackground = drawsBackground
-        self.backgroundColor = drawsBackground ? backgroundColor : .clear
         resizeToFitContent()
     }
 
@@ -106,15 +97,12 @@ final class TextAnnotationEditorView: NSScrollView, NSTextViewDelegate {
     private func configureTextView(
         text: String,
         font: NSFont,
-        textColor: NSColor,
-        backgroundColor: NSColor,
-        drawsBackground: Bool
+        textColor: NSColor
     ) {
         textView.string = text
         textView.font = font
         textView.textColor = textColor
-        textView.backgroundColor = backgroundColor
-        textView.drawsBackground = drawsBackground
+        textView.drawsBackground = false
         textView.alignment = .center
         textView.delegate = self
         textView.isEditable = true

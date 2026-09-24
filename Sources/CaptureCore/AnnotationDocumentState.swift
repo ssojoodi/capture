@@ -136,6 +136,17 @@ extension AnnotationDocumentState {
     }
 
     @discardableResult
+    public func applyTextBackgroundToSelected(_ color: NSColor) -> Bool {
+        guard let text = annotation(with: selectedAnnotationID) as? TextAnnotation else { return false }
+        let drawsBackground = color.alphaComponent > 0
+        guard !colorsMatch(text.backgroundColor, color) || text.drawsBackground != drawsBackground else { return false }
+        recordUndoSnapshot()
+        text.backgroundColor = color
+        text.drawsBackground = drawsBackground
+        return true
+    }
+
+    @discardableResult
     public func applyThicknessToSelected(_ thickness: CGFloat) -> Bool {
         guard let annotation = annotation(with: selectedAnnotationID) else { return false }
         switch annotation {

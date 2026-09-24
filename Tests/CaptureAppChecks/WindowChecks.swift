@@ -1,4 +1,5 @@
 import AppKit
+import CaptureCore
 
 // Standalone AppKit integration checks; run with bash scripts/check_windows.sh.
 @main
@@ -51,7 +52,10 @@ enum WindowChecks {
         app.delegate = delegate
         app.mainMenu = AppMenu.makeMenu()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            autoreleasepool { runChecks(app: app, delegate: delegate) }
+            autoreleasepool {
+                runTextBackgroundChecks()
+                runChecks(app: app, delegate: delegate)
+            }
             precondition(closedController == nil, "Closed canvas controller was retained")
             print("PASS: Cmd-N, independent canvases, active-window shortcuts, quit cancellation, close cleanup")
             exit(0)
@@ -99,5 +103,76 @@ enum WindowChecks {
         // Avoid triggering the application's last-window-closed quit during cleanup.
         app.delegate = nil
         first.close()
+    }
+
+    static func runTextBackgroundChecks() {
+        let controller = MainWindowController()
+        let window = controller.window!
+        controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+        let canvas = canvas(in: window)
+        let image = NSImage(size: NSSize(width: 600, height: 400), flipped: false) { rect in
+            NSColor.white.setFill()
+            rect.fill()
+            return true
+        }
+        precondition(canvas.droppedImageHandler!(image))
+        controller.selectTool(NSToolbarItem(itemIdentifier: .init("text")))
+        let location = canvas.convert(NSPoint(x: canvas.bounds.midX - 130, y: canvas.bounds.midY - 38), to: nil)
+        let event = NSEvent.mouseEvent(with: .leftMouseDown, location: location, modifierFlags: [], timestamp: 0,
+                                      windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                      clickCount: 1, pressure: 1)!
+        canvas.mouseDown(with: event)
+        let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+        precondition(!editor.drawsBackground && !editor.contentView.drawsBackground && !editor.textView.drawsBackground,
+                     "Editor must not compound the canvas background opacity")
+        editor.textView.insertText("Text background", replacementRange: NSRange(location: 0, length: 0))
+        precondition(canvas.selectedTextBackground.alphaComponent == 0.5)
+        precondition(canvas.selectedTextBackground.withAlphaComponent(1).usingColorSpace(.sRGB) == NSColor.black.usingColorSpace(.sRGB))
+
+        func snapshot(_ name: String) -> NSBitmapImageRep {
+            window.displayIfNeeded()
+            let bitmap = canvas.bitmapImageRepForCachingDisplay(in: canvas.bounds)!
+            canvas.cacheDisplay(in: canvas.bounds, to: bitmap)
+            let directory = URL(fileURLWithPath: "artifacts/verification", isDirectory: true)
+            try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try! bitmap.representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent(name))
+            return bitmap
+        }
+        let editing = snapshot("text-background-editing.png")
+        let samplePoint = NSPoint(x: editor.frame.minX + 20, y: editor.frame.minY + 12)
+        canvas.commitTextEditing()
+        let committed = snapshot("text-background-committed.png")
+        let x = Int(samplePoint.x * CGFloat(editing.pixelsWide) / canvas.bounds.width)
+        let y = Int((canvas.bounds.height - samplePoint.y) * CGFloat(editing.pixelsHigh) / canvas.bounds.height)
+        let before = editing.colorAt(x: x, y: y)!.usingColorSpace(.sRGB)!
+        let after = committed.colorAt(x: x, y: y)!.usingColorSpace(.sRGB)!
+        precondition(abs(before.redComponent - after.redComponent) < 0.02, "Editing and committed backgrounds differ")
+        precondition(before.redComponent > 0.4 && before.redComponent < 0.65, "Expected a half-opacity background")
+
+        let item = window.toolbar!.items.first { $0.itemIdentifier.rawValue == "textBackground" }!
+        let menu = (item.view as! NSPopUpButton).menu!
+        let colors = menu.items.first { $0.title == "Colour" }!.submenu!
+        let opacities = menu.items.first { $0.title == "Opacity" }!.submenu!
+        controller.menuWillOpen(colors)
+        controller.menuWillOpen(opacities)
+        precondition(colors.items.first { $0.title == "Black" }!.state == .on)
+        precondition(opacities.items.first { $0.tag == 50 }!.state == .on)
+        let blue = colors.items.first { $0.title == "Blue" }!
+        precondition(NSApp.sendAction(blue.action!, to: blue.target, from: blue))
+        precondition(canvas.selectedTextBackground.alphaComponent == 0.5)
+        let blueColor = canvas.selectedTextBackground.withAlphaComponent(1)
+        let transparent = opacities.items.first { $0.tag == 0 }!
+        precondition(NSApp.sendAction(transparent.action!, to: transparent.target, from: transparent))
+        precondition(canvas.selectedTextBackground.alphaComponent == 0)
+        precondition(canvas.selectedTextBackground.withAlphaComponent(1) == blueColor)
+        controller.undo(nil)
+        precondition(canvas.selectedTextBackground.alphaComponent == 0.5)
+        controller.redo(nil)
+        precondition(canvas.selectedTextBackground.alphaComponent == 0)
+        controller.menuWillOpen(opacities)
+        precondition(transparent.state == .on)
+        window.close()
+        print("PASS: text background defaults, editing compositing, colour/opacity menu, undo/redo")
     }
 }

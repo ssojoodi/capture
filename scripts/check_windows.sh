@@ -12,4 +12,4 @@ xcrun swiftc -swift-version 5 -module-cache-path .build/window-checks/modules \
     Sources/CaptureApp/MainWindowController.swift Sources/CaptureApp/AnnotationCanvasView.swift \
     Sources/CaptureApp/TextAnnotationEditorView.swift Tests/CaptureAppChecks/WindowChecks.swift \
     -o .build/window-checks/check-windows
-.build/window-checks/check-windows
+LLVM_PROFILE_FILE="$PWD/.build/window-checks/default.profraw" .build/window-checks/check-windows

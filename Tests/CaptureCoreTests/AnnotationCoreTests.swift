@@ -9,20 +9,73 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertFalse(arrow.hitTest(CGPoint(x: 50, y: 60)))
     }
 
-    func testTextAnnotationDefaultsToTransparentBackgroundAndReadableColor() {
+    func testTextAnnotationDefaultsToHalfOpacityBlackBackground() {
         let text = TextAnnotation(bounds: CGRect(x: 10, y: 10, width: 120, height: 48))
-        XCTAssertFalse(text.drawsBackground)
+        XCTAssertTrue(text.drawsBackground)
+        XCTAssertEqual(text.backgroundColor.usingColorSpace(.sRGB), NSColor.black.withAlphaComponent(0.5).usingColorSpace(.sRGB))
         XCTAssertEqual(text.textColor.usingColorSpace(.sRGB), CapturePalette.softRed.usingColorSpace(.sRGB))
     }
 
     func testTextRenderingStillChangesPixelsWithoutBackground() throws {
         let state = AnnotationDocumentState()
         state.load(image: solidImage(width: 220, height: 120, color: .white))
-        state.addAnnotation(TextAnnotation(bounds: CGRect(x: 20, y: 24, width: 180, height: 70), text: "A", fontSize: 54))
+        state.addAnnotation(TextAnnotation(bounds: CGRect(x: 20, y: 24, width: 180, height: 70), text: "A", fontSize: 54, drawsBackground: false))
         let flattened = try XCTUnwrap(state.flattenedImage())
         XCTAssertGreaterThan(flattened.countNonWhitePixels(), 20)
         let corner = try XCTUnwrap(flattened.sampleColor(x: 22, y: 26))
         XCTAssertEqual(corner.brightnessComponent, 1, accuracy: 0.001)
+    }
+
+    func testTextBackgroundChangesAreUndoableAndDoNotChangeForeground() throws {
+        let state = AnnotationDocumentState()
+        let text = TextAnnotation(bounds: CGRect(x: 10, y: 10, width: 120, height: 48))
+        state.addAnnotation(text)
+        let originalRevision = state.revisionID
+        XCTAssertFalse(state.applyTextBackgroundToSelected(text.backgroundColor))
+        XCTAssertEqual(state.revisionID, originalRevision)
+        let blue = CapturePalette.softBlue.withAlphaComponent(0.75)
+        XCTAssertTrue(state.applyTextBackgroundToSelected(blue))
+        XCTAssertEqual(text.textColor, CapturePalette.softRed)
+        XCTAssertTrue(state.undo())
+        let restored = try XCTUnwrap(state.annotation(with: text.id) as? TextAnnotation)
+        XCTAssertEqual(restored.backgroundColor.usingColorSpace(.sRGB), NSColor.black.withAlphaComponent(0.5).usingColorSpace(.sRGB))
+        XCTAssertTrue(state.redo())
+        XCTAssertEqual((state.annotation(with: text.id) as? TextAnnotation)?.backgroundColor, blue)
+        XCTAssertTrue(state.applyTextBackgroundToSelected(blue.withAlphaComponent(0)))
+        XCTAssertFalse((state.annotation(with: text.id) as! TextAnnotation).drawsBackground)
+        XCTAssertTrue(state.undo())
+        XCTAssertTrue((state.annotation(with: text.id) as! TextAnnotation).drawsBackground)
+        XCTAssertEqual((state.annotation(with: text.id) as? TextAnnotation)?.backgroundColor, blue)
+    }
+
+    func testTextBackgroundDoesNotChangeOtherAnnotations() {
+        let state = AnnotationDocumentState()
+        let rectangle = RectangleAnnotation(bounds: CGRect(x: 10, y: 10, width: 120, height: 48))
+        state.addAnnotation(rectangle)
+        let revision = state.revisionID
+        XCTAssertFalse(state.applyTextBackgroundToSelected(.white))
+        XCTAssertEqual(state.revisionID, revision)
+        state.selectedAnnotationID = nil
+        XCTAssertFalse(state.applyTextBackgroundToSelected(.black))
+        XCTAssertEqual(state.revisionID, revision)
+    }
+
+    func testTextBackgroundOpacityCompositesIntoFlattenedImage() throws {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 100, height: 100, color: .white))
+        state.addAnnotation(TextAnnotation(bounds: CGRect(x: 10, y: 10, width: 80, height: 80), text: ""))
+        for opacity: CGFloat in [0, 0.25, 0.5, 0.75, 1] {
+            state.applyTextBackgroundToSelected(NSColor.black.withAlphaComponent(opacity))
+            let flattened = try XCTUnwrap(state.flattenedImage())
+            // Read the renderer's sRGB samples directly, avoiding colorAt's colour-space conversion.
+            let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(flattened.cgImageForRendering()))
+            var pixel = [UInt](repeating: 0, count: 4)
+            bitmap.getPixel(&pixel, atX: 50, y: 50)
+            for channel in pixel.prefix(3) {
+                XCTAssertEqual(CGFloat(channel) / 255, 1 - opacity, accuracy: 0.01)
+            }
+            XCTAssertEqual(pixel[3], 255)
+        }
     }
 
     func testSelectionHandleGeometryForRectangle() {
