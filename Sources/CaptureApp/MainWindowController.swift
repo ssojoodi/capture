@@ -80,6 +80,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.delegate = self
         window.contentView = makeContentView()
         window.toolbar = makeToolbar()
+        window.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(state.selectedTool.rawValue)
+        canvasView.toolSelectionHandler = { [weak self] tool in
+            self?.window?.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(tool.rawValue)
+        }
         installKeyMonitor()
         canvasView.statusHandler = { [weak self] text in self?.statusLabel.stringValue = text }
         canvasView.droppedFileHandler = { [weak self] url in self?.openDroppedFile(url) ?? false }
@@ -209,6 +213,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         toolbarDefaultItemIdentifiers(toolbar)
+    }
+
+    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        Tool.allCases.map { NSToolbarItem.Identifier($0.rawValue) }
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
@@ -495,6 +503,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         sourceFormat = sourceURL.flatMap(RasterImageFormat.init(url:))
         state.load(image: image)
         savedRevisionID = state.revisionID
+        canvasView.toolDidChange()
         canvasView.zoomToFit()
         canvasView.needsDisplay = true
         statusLabel.stringValue = message

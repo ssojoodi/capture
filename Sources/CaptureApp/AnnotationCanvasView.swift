@@ -21,11 +21,14 @@ final class AnnotationCanvasView: NSView {
     private var currentTextBackground = NSColor.black.withAlphaComponent(0.5)
     private var activeTextEditor: TextAnnotationEditorView?
     private weak var activeTextAnnotation: TextAnnotation?
+    // Keep the placement across focus changes, such as using text style controls.
+    private var textPlacementID: UUID?
     private var activeTextWasNew = false
     private var activeTextDidRecordUndo = false
     private let defaultTextAnnotationSize = CGSize(width: 260, height: 76)
     var isEditingText: Bool { activeTextEditor != nil }
     var statusHandler: ((String) -> Void)?
+    var toolSelectionHandler: ((Tool) -> Void)?
     var droppedFileHandler: ((URL) -> Bool)?
     var droppedImageHandler: ((NSImage) -> Bool)?
 
@@ -45,8 +48,10 @@ final class AnnotationCanvasView: NSView {
 
     func toolDidChange() {
         commitActiveTextEdit()
+        textPlacementID = nil
         cancelInteraction()
         window?.invalidateCursorRects(for: self)
+        toolSelectionHandler?(state.selectedTool)
         needsDisplay = true
     }
 
@@ -285,6 +290,13 @@ final class AnnotationCanvasView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        if state.selectedTool == .text,
+           let text = state.annotation(with: textPlacementID) as? TextAnnotation,
+           !text.bounds.contains(imagePoint(for: event.locationInWindow)) {
+            state.selectedTool = .select
+            toolDidChange()
+            statusHandler?("Tool: select")
+        }
         window?.makeFirstResponder(self)
         commitActiveTextEdit()
         guard state.hasImage else { return }
@@ -334,6 +346,7 @@ final class AnnotationCanvasView: NSView {
             )
             state.addAnnotation(annotation, select: true)
             beginEditing(annotation, isNew: true)
+            textPlacementID = annotation.id
             statusHandler?("Added text annotation")
         case .blur:
             interaction = .creatingAnnotation(start: point, annotation: BlurAnnotation(bounds: CGRect(origin: point, size: .zero)))

@@ -53,6 +53,7 @@ enum WindowChecks {
         app.mainMenu = AppMenu.makeMenu()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             autoreleasepool {
+                runTextClickAwayChecks()
                 runTextBackgroundChecks()
                 runChecks(app: app, delegate: delegate)
             }
@@ -103,6 +104,57 @@ enum WindowChecks {
         // Avoid triggering the application's last-window-closed quit during cleanup.
         app.delegate = nil
         first.close()
+    }
+
+    static func runTextClickAwayChecks() {
+        let state = AnnotationDocumentState()
+        let canvas = AnnotationCanvasView(state: state)
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 800, height: 600),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = canvas
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        state.load(image: NSImage(size: NSSize(width: 600, height: 400)))
+        canvas.zoomToFit()
+        var selectedTool: Tool?
+        canvas.toolSelectionHandler = { selectedTool = $0 }
+        func chooseText() {
+            state.selectedTool = .text
+            canvas.toolDidChange()
+        }
+        func click(_ point: NSPoint) {
+            let event = NSEvent.mouseEvent(with: .leftMouseDown, location: canvas.convert(point, to: nil),
+                                          modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                          context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            canvas.mouseDown(with: event)
+            canvas.mouseUp(with: event)
+        }
+        let origin = NSPoint(x: 250, y: 220)
+        let outside = NSPoint(x: 150, y: 150)
+        chooseText()
+        click(origin)
+        let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+        editor.textView.insertText("Keep this text", replacementRange: NSRange(location: 0, length: 0))
+        click(outside)
+        precondition(!canvas.isEditingText && state.selectedTool == .select && selectedTool == .select)
+        precondition(state.annotations.count == 1 && (state.annotations[0] as! TextAnnotation).text == "Keep this text")
+        precondition(state.selectedAnnotationID == nil)
+        click(NSPoint(x: 160, y: 160))
+        precondition(state.annotations.count == 1, "Repeated outside clicks must not create text")
+        precondition(state.undo() && state.annotations.isEmpty)
+        precondition(state.redo() && state.annotations.count == 1)
+
+        chooseText()
+        click(NSPoint(x: 250, y: 340))
+        precondition(state.annotations.count == 2 && canvas.isEditingText)
+        // Styling commits the editor, but the next outside click must still leave Text.
+        canvas.applySelectedTextBackground(NSColor.white.withAlphaComponent(0.75))
+        precondition(!canvas.isEditingText)
+        click(NSPoint(x: origin.x + 20, y: origin.y + 20))
+        precondition(state.selectedTool == .select && state.annotations.count == 2)
+        precondition(state.selectedAnnotationID == state.annotations[0].id, "Click-away should select the existing annotation")
+        print("PASS: text click-away commits content, returns to Select, avoids extra boxes, supports re-entry and undo")
     }
 
     static func runTextBackgroundChecks() {
@@ -172,6 +224,16 @@ enum WindowChecks {
         precondition(canvas.selectedTextBackground.alphaComponent == 0)
         controller.menuWillOpen(opacities)
         precondition(transparent.state == .on)
+        controller.selectTool(NSToolbarItem(itemIdentifier: .init("text")))
+        let newTextLocation = canvas.convert(NSPoint(x: canvas.bounds.midX - 180, y: canvas.bounds.midY + 100), to: nil)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: newTextLocation, modifierFlags: [],
+                                                timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                                eventNumber: 0, clickCount: 1, pressure: 1)!)
+        let outside = canvas.convert(NSPoint(x: canvas.bounds.midX - 250, y: canvas.bounds.midY - 150), to: nil)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: outside, modifierFlags: [],
+                                                timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                                eventNumber: 0, clickCount: 1, pressure: 1)!)
+        precondition(window.toolbar?.selectedItemIdentifier?.rawValue == "select", "Toolbar must show Select after click-away")
         window.close()
         print("PASS: text background defaults, editing compositing, colour/opacity menu, undo/redo")
     }
