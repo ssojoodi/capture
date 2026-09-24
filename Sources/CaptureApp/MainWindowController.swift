@@ -327,6 +327,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
 
+    // Text editors handle paste first; the window handles image paste otherwise.
+    @objc func paste(_ sender: Any?) {
+        pasteImage(sender)
+    }
+
     @objc func pasteImage(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
         if let image = NSImage(pasteboard: pasteboard) {
