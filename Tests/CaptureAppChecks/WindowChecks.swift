@@ -53,6 +53,7 @@ enum WindowChecks {
         app.mainMenu = AppMenu.makeMenu()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             autoreleasepool {
+                runTextBoundsChecks()
                 runTextClickAwayChecks()
                 runTextBackgroundChecks()
                 runChecks(app: app, delegate: delegate)
@@ -104,6 +105,69 @@ enum WindowChecks {
         // Avoid triggering the application's last-window-closed quit during cleanup.
         app.delegate = nil
         first.close()
+    }
+
+    static func runTextBoundsChecks() {
+        let state = AnnotationDocumentState()
+        let canvas = AnnotationCanvasView(state: state)
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 800, height: 600),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = canvas
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        let pixels = CGContext(data: nil, width: 400, height: 300, bitsPerComponent: 8, bytesPerRow: 0,
+                               space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        pixels.setFillColor(NSColor.white.cgColor)
+        pixels.fill(CGRect(x: 0, y: 0, width: 400, height: 300))
+        state.load(image: NSImage(cgImage: pixels.makeImage()!, size: NSSize(width: 400, height: 300)))
+        canvas.zoomToFit()
+        func mouse(_ type: NSEvent.EventType, at point: NSPoint) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: canvas.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                              windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        state.selectedTool = .text
+        canvas.toolDidChange()
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 595, y: 445)))
+        let text = state.annotations[0] as! TextAnnotation
+        let imageBounds = CGRect(origin: .zero, size: state.imageSize)
+        precondition(imageBounds.contains(text.bounds), "Edge placement must fit inside the image")
+        let originalWidth = text.bounds.width
+        let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+        let longText = String(repeating: "Long text wraps within this box. ", count: 15)
+        editor.textView.insertText(longText, replacementRange: NSRange(location: 0, length: 0))
+        precondition(text.bounds.width == originalWidth && imageBounds.contains(text.bounds))
+        precondition(editor.hasOverflow && editor.text == longText, "Overflow must preserve all text")
+        let handle = NSPoint(x: editor.frame.maxX, y: editor.frame.maxY)
+        precondition(canvas.hitTest(handle) === canvas, "Editor must not intercept a resize handle")
+        canvas.commitTextEditing()
+        precondition(text.text == longText)
+
+        // Legacy overflowing box: the right handle is 60 pixels beyond the image.
+        text.bounds = CGRect(x: 300, y: 100, width: 160, height: 100)
+        state.selectedTool = .select
+        canvas.toolDidChange()
+        let beforeResize = text.bounds
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 660, y: 300)))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 580, y: 300)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 580, y: 300)))
+        precondition(text.bounds == CGRect(x: 300, y: 100, width: 80, height: 100), "Off-image handle must resize, not move")
+        precondition(state.undo() && state.annotations[0].bounds == beforeResize)
+        precondition(state.redo() && state.annotations[0].bounds.width == 80)
+        state.annotations[0].bounds = beforeResize
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 660, y: 350)))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 580, y: 330)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 580, y: 330)))
+        precondition(state.annotations[0].bounds == CGRect(x: 300, y: 100, width: 80, height: 80),
+                     "Off-image corner must resize both dimensions without moving the opposite corner")
+
+        let small = TextAnnotationEditorView(frame: CGRect(x: 0, y: 0, width: 60, height: 30), text: longText,
+                                            font: .boldSystemFont(ofSize: 12), textColor: .black,
+                                            maximumSize: CGSize(width: 60, height: 40), scale: 0.5)
+        precondition(small.frame.width == 60 && small.frame.height <= 40)
+        precondition(small.textView.textContainerInset == CGSize(width: 5, height: 3))
+        precondition(small.text == longText)
+        print("PASS: text wraps within image bounds, overflow retains text, off-image handles resize, undo restores bounds")
     }
 
     static func runTextClickAwayChecks() {
@@ -192,7 +256,7 @@ enum WindowChecks {
             return bitmap
         }
         let editing = snapshot("text-background-editing.png")
-        let samplePoint = NSPoint(x: editor.frame.minX + 20, y: editor.frame.minY + 12)
+        let samplePoint = NSPoint(x: editor.frame.minX + 20, y: editor.frame.minY + 2)
         canvas.commitTextEditing()
         let committed = snapshot("text-background-committed.png")
         let x = Int(samplePoint.x * CGFloat(editing.pixelsWide) / canvas.bounds.width)

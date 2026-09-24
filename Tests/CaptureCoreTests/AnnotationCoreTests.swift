@@ -86,6 +86,15 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertEqual(AnnotationSelectionGeometry.hitHandle(at: CGPoint(x: 121, y: 69), annotation: rectangle, hitRadius: 5), .right)
     }
 
+    func testFittingTextBoundsPreservesSizeAndKeepsAllEdgesInsideImage() {
+        let image = CGRect(x: 0, y: 0, width: 200, height: 100)
+        XCTAssertEqual(CGRect(x: 190, y: 95, width: 120, height: 60).fitted(inside: image),
+                       CGRect(x: 80, y: 40, width: 120, height: 60))
+        XCTAssertEqual(CGRect(x: -20, y: -30, width: 120, height: 60).fitted(inside: image),
+                       CGRect(x: 0, y: 0, width: 120, height: 60))
+        XCTAssertEqual(CGRect(x: 150, y: 50, width: 400, height: 200).fitted(inside: image), image)
+    }
+
     func testArrowEndpointHandleHitTesting() {
         let arrow = ArrowAnnotation(start: CGPoint(x: 10, y: 20), end: CGPoint(x: 100, y: 140))
         XCTAssertEqual(AnnotationSelectionGeometry.hitHandle(at: CGPoint(x: 12, y: 22), annotation: arrow, hitRadius: 6), .arrowStart)
