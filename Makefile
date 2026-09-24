@@ -137,12 +137,16 @@ release:
 	xcrun stapler staple "$(DMG)"
 	xcrun stapler validate "$(DMG)"
 	spctl -a -t open --context context:primary-signature -v "$(DMG)"
-	@printf "Created signed and notarized DMG: %s\n" "$(DMG)"
+	@if [ -f "web-page/$(APP_NAME).dmg" ]; then \
+		mkdir -p "docs/dmg-backups"; \
+		mv "web-page/$(APP_NAME).dmg" "docs/dmg-backups/$(APP_NAME)-$$(date +%Y-%m-%d-%H-%M-%S).dmg"; \
+	fi
+	mv "$(DMG)" "web-page/$(APP_NAME).dmg"
 
 paths:
 	@printf "Built app: %s\n" "$(APP)"
 	@printf "Release app: %s\n" "$(RELEASE_SOURCE_APP)"
-	@printf "DMG: %s\n" "$(DMG)"
+	@printf "DMG: web-page/%s.dmg\n" "$(APP_NAME)"
 	@printf "Logo PNG: %s\n" "$(LOGO_PNG)"
 	@printf "App icon PNG: %s\n" "$(APP_ICON_PNG)"
 	@printf "DMG background PNG: %s\n" "$(DMG_BACKGROUND_PNG)"
@@ -156,7 +160,7 @@ help:
 	@printf "  make test        Run unit tests\n"
 	@printf "  make run         Build and open the app\n"
 	@printf "  make uninstall   Remove /Applications/Capture.app\n"
-	@printf "  make release     Build, sign, package, notarize, staple, and validate a DMG\n"
+	@printf "  make release     Build, validate, and move the DMG to web-page\n"
 	@printf "  make paths       Print important generated paths\n"
 	@printf "\nVariables:\n"
 	@printf "  CONFIGURATION=Debug|Release  Default: Debug\n"

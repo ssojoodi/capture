@@ -108,7 +108,9 @@ Create a signed, notarized, stapled DMG:
 make release
 ```
 
-The generated disk image is written to `.build/release/`.
+The final DMG is `web-page/Capture.dmg`. If a previous DMG exists there,
+`make release` moves it to `docs/dmg-backups/` with a timestamp before moving
+the new DMG into place. Backups stay out of Git.
 
 ## Local Xcode Signing Config
 
