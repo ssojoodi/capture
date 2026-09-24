@@ -10,6 +10,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var sourceURL: URL?
     private var sourceFormat: RasterImageFormat?
     private var savedRevisionID: UUID?
+    var onWindowClosed: ((MainWindowController) -> Void)?
 
     private enum ToolbarID {
         static let toolbar = NSToolbar.Identifier("Capture.toolbar")
@@ -65,6 +66,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             defer: false
         )
         window.title = AppMenu.appName
+        window.isReleasedWhenClosed = false
         window.appearance = NSAppearance(named: .aqua)
         window.toolbarStyle = .expanded
         window.titleVisibility = .visible
@@ -90,8 +92,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-            if self.canvasView.isEditingText {
+            guard let self, let window = self.window,
+                  event.window === window, window.isKeyWindow,
+                  NSApp.modalWindow == nil, window.attachedSheet == nil else { return event }
+            if self.canvasView.isEditingText || window.firstResponder is NSTextView {
                 return event
             }
             let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -388,8 +392,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         confirmDiscardOrSaveChanges()
     }
 
+    func windowWillClose(_ notification: Notification) {
+        onWindowClosed?(self)
+    }
+
     func canTerminate() -> Bool {
-        confirmDiscardOrSaveChanges()
+        confirmDiscardOrSaveChanges(markDiscardedChanges: false)
     }
 
     private var hasUnsavedChanges: Bool {
@@ -480,9 +488,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         return "\(baseName).\(format.fileExtension)"
     }
 
-    private func confirmDiscardOrSaveChanges() -> Bool {
+    private func confirmDiscardOrSaveChanges(markDiscardedChanges: Bool = true) -> Bool {
         canvasView.commitTextEditing()
         guard hasUnsavedChanges else { return true }
+        window?.makeKeyAndOrderFront(nil)
 
         let alert = NSAlert()
         alert.messageText = "Save changes to \(sourceURL?.lastPathComponent ?? "image")?"
@@ -495,8 +504,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         case .alertFirstButtonReturn:
             return saveCurrentImage()
         case .alertSecondButtonReturn:
-            savedRevisionID = state.revisionID
-            updateDocumentPresentation()
+            if markDiscardedChanges {
+                savedRevisionID = state.revisionID
+                updateDocumentPresentation()
+            }
             return true
         default:
             return false

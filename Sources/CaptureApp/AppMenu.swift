@@ -17,7 +17,10 @@ enum AppMenu {
         appItem.submenu = appMenu
 
         let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(withTitle: "New Canvas", action: #selector(AppDelegate.newDocument(_:)), keyEquivalent: "n")
         fileMenu.addItem(withTitle: "Open...", action: #selector(MainWindowController.openImage(_:)), keyEquivalent: "o")
+        fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(withTitle: "Save", action: #selector(MainWindowController.save(_:)), keyEquivalent: "s")
         let saveAsItem = fileMenu.addItem(withTitle: "Save As...", action: #selector(MainWindowController.saveAs(_:)), keyEquivalent: "s")
         saveAsItem.keyEquivalentModifierMask = [.command, .shift]
