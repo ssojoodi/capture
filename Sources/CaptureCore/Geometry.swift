@@ -17,6 +17,15 @@ public extension CGRect {
     func insetForHitTesting(_ amount: CGFloat) -> CGRect {
         insetBy(dx: -amount, dy: -amount)
     }
+
+    /// Fit the whole rectangle, translating it before reducing oversized dimensions.
+    func fitted(inside bounds: CGRect) -> CGRect {
+        let width = min(normalized.width, bounds.width)
+        let height = min(normalized.height, bounds.height)
+        return CGRect(x: min(max(normalized.minX, bounds.minX), bounds.maxX - width),
+                      y: min(max(normalized.minY, bounds.minY), bounds.maxY - height),
+                      width: width, height: height)
+    }
 }
 
 public struct ViewportTransform: Equatable {

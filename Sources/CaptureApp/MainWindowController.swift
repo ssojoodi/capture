@@ -2,7 +2,7 @@ import AppKit
 import CaptureCore
 import UniformTypeIdentifiers
 
-final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
+final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSMenuDelegate {
     private let state = AnnotationDocumentState()
     private let canvasView: AnnotationCanvasView
     private let statusLabel = NSTextField(labelWithString: "Open, paste, or drop an image to start")
@@ -10,6 +10,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var sourceURL: URL?
     private var sourceFormat: RasterImageFormat?
     private var savedRevisionID: UUID?
+    var onWindowClosed: ((MainWindowController) -> Void)?
+    private static let textBackgroundColors = [
+        CaptureColor(name: "Black", color: .black),
+        CaptureColor(name: "White", color: .white)
+    ] + Array(CapturePalette.all.prefix(5))
 
     private enum ToolbarID {
         static let toolbar = NSToolbar.Identifier("Capture.toolbar")
@@ -22,6 +27,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         static let redo = NSToolbarItem.Identifier("redo")
         static let color = NSToolbarItem.Identifier("color")
         static let thickness = NSToolbarItem.Identifier("thickness")
+        static let textBackground = NSToolbarItem.Identifier("textBackground")
         static let zoomIn = NSToolbarItem.Identifier("zoomIn")
         static let zoomOut = NSToolbarItem.Identifier("zoomOut")
         static let zoomFit = NSToolbarItem.Identifier("zoomFit")
@@ -65,6 +71,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             defer: false
         )
         window.title = AppMenu.appName
+        window.isReleasedWhenClosed = false
         window.appearance = NSAppearance(named: .aqua)
         window.toolbarStyle = .expanded
         window.titleVisibility = .visible
@@ -73,6 +80,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.delegate = self
         window.contentView = makeContentView()
         window.toolbar = makeToolbar()
+        window.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(state.selectedTool.rawValue)
+        canvasView.toolSelectionHandler = { [weak self] tool in
+            self?.window?.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(tool.rawValue)
+        }
         installKeyMonitor()
         canvasView.statusHandler = { [weak self] text in self?.statusLabel.stringValue = text }
         canvasView.droppedFileHandler = { [weak self] url in self?.openDroppedFile(url) ?? false }
@@ -90,8 +101,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-            if self.canvasView.isEditingText {
+            guard let self, let window = self.window,
+                  event.window === window, window.isKeyWindow,
+                  NSApp.modalWindow == nil, window.attachedSheet == nil else { return event }
+            if self.canvasView.isEditingText || window.firstResponder is NSTextView {
                 return event
             }
             let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -186,6 +199,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             ToolbarID.redo,
             .space,
             ToolbarID.color,
+            ToolbarID.textBackground,
             ToolbarID.thickness,
             .space,
             ToolbarID.zoomOut,
@@ -201,6 +215,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         toolbarDefaultItemIdentifiers(toolbar)
     }
 
+    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        Tool.allCases.map { NSToolbarItem.Identifier($0.rawValue) }
+    }
+
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         if let spec = toolbarSpecs.first(where: { $0.identifier == itemIdentifier }) {
             return toolbarItem(spec)
@@ -211,6 +229,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             return colorToolbarItem(itemIdentifier)
         case ToolbarID.thickness:
             return thicknessToolbarItem(itemIdentifier)
+        case ToolbarID.textBackground:
+            return textBackgroundToolbarItem(itemIdentifier)
         default:
             return nil
         }
@@ -241,6 +261,70 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         item.minSize = NSSize(width: 96, height: 28)
         item.maxSize = NSSize(width: 116, height: 28)
         return item
+    }
+
+    private func textBackgroundToolbarItem(_ identifier: NSToolbarItem.Identifier) -> NSToolbarItem {
+        let item = NSToolbarItem(itemIdentifier: identifier)
+        item.label = "Text Background"
+        item.paletteLabel = item.label
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 112, height: 28), pullsDown: true)
+        popup.menu = makeTextBackgroundMenu()
+        popup.toolTip = "Background colour and opacity for selected and new text"
+        popup.setAccessibilityLabel("Text Background")
+        item.view = popup
+        let overflowItem = NSMenuItem(title: item.label, action: nil, keyEquivalent: "")
+        overflowItem.submenu = makeTextBackgroundMenu()
+        item.menuFormRepresentation = overflowItem
+        return item
+    }
+
+    private func makeTextBackgroundMenu() -> NSMenu {
+        let menu = NSMenu(title: "Text Background")
+        menu.addItem(withTitle: "Background", action: nil, keyEquivalent: "")
+        let colorItem = menu.addItem(withTitle: "Colour", action: nil, keyEquivalent: "")
+        let colors = NSMenu(title: "Colour")
+        colors.delegate = self
+        for (index, color) in Self.textBackgroundColors.enumerated() {
+            let item = colors.addItem(withTitle: color.name, action: #selector(selectTextBackgroundColor(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+        }
+        colorItem.submenu = colors
+        let opacityItem = menu.addItem(withTitle: "Opacity", action: nil, keyEquivalent: "")
+        let opacities = NSMenu(title: "Opacity")
+        opacities.delegate = self
+        for percent in [0, 25, 50, 75, 100] {
+            let title = percent == 0 ? "0% (None)" : "\(percent)%"
+            let item = opacities.addItem(withTitle: title, action: #selector(selectTextBackgroundOpacity(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = percent
+        }
+        opacityItem.submenu = opacities
+        return menu
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        let color = canvasView.selectedTextBackground
+        for item in menu.items {
+            if item.action == #selector(selectTextBackgroundColor(_:)), Self.textBackgroundColors.indices.contains(item.tag) {
+                let matches = color.withAlphaComponent(1).usingColorSpace(.sRGB)
+                    == Self.textBackgroundColors[item.tag].color.usingColorSpace(.sRGB)
+                item.state = matches ? .on : .off
+            } else if item.action == #selector(selectTextBackgroundOpacity(_:)) {
+                item.state = abs(color.alphaComponent * 100 - CGFloat(item.tag)) < 0.01 ? .on : .off
+            }
+        }
+    }
+
+    @objc func selectTextBackgroundColor(_ sender: NSMenuItem) {
+        guard Self.textBackgroundColors.indices.contains(sender.tag) else { return }
+        let color = Self.textBackgroundColors[sender.tag].color.withAlphaComponent(canvasView.selectedTextBackground.alphaComponent)
+        canvasView.applySelectedTextBackground(color)
+    }
+
+    @objc func selectTextBackgroundOpacity(_ sender: NSMenuItem) {
+        let opacity = CGFloat(min(100, max(0, sender.tag))) / 100
+        canvasView.applySelectedTextBackground(canvasView.selectedTextBackground.withAlphaComponent(opacity))
     }
 
     private func thicknessToolbarItem(_ identifier: NSToolbarItem.Identifier) -> NSToolbarItem {
@@ -327,6 +411,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
 
+    // Text editors handle paste first; the window handles image paste otherwise.
+    @objc func paste(_ sender: Any?) {
+        pasteImage(sender)
+    }
+
     @objc func pasteImage(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
         if let image = NSImage(pasteboard: pasteboard) {
@@ -337,6 +426,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @objc func copyFlattenedImage(_ sender: Any?) {
+        canvasView.commitTextEditing()
         guard let image = state.flattenedImage() else {
             statusLabel.stringValue = "Nothing to copy"
             return
@@ -356,6 +446,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @objc func exportJPG(_ sender: Any?) {
+        canvasView.commitTextEditing()
         guard let data = state.jpegData() else {
             statusLabel.stringValue = "Nothing to export"
             return
@@ -383,8 +474,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         confirmDiscardOrSaveChanges()
     }
 
+    func windowWillClose(_ notification: Notification) {
+        onWindowClosed?(self)
+    }
+
     func canTerminate() -> Bool {
-        confirmDiscardOrSaveChanges()
+        confirmDiscardOrSaveChanges(markDiscardedChanges: false)
     }
 
     private var hasUnsavedChanges: Bool {
@@ -410,6 +505,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         sourceFormat = sourceURL.flatMap(RasterImageFormat.init(url:))
         state.load(image: image)
         savedRevisionID = state.revisionID
+        canvasView.toolDidChange()
         canvasView.zoomToFit()
         canvasView.needsDisplay = true
         statusLabel.stringValue = message
@@ -475,9 +571,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         return "\(baseName).\(format.fileExtension)"
     }
 
-    private func confirmDiscardOrSaveChanges() -> Bool {
+    private func confirmDiscardOrSaveChanges(markDiscardedChanges: Bool = true) -> Bool {
         canvasView.commitTextEditing()
         guard hasUnsavedChanges else { return true }
+        window?.makeKeyAndOrderFront(nil)
 
         let alert = NSAlert()
         alert.messageText = "Save changes to \(sourceURL?.lastPathComponent ?? "image")?"
@@ -490,8 +587,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         case .alertFirstButtonReturn:
             return saveCurrentImage()
         case .alertSecondButtonReturn:
-            savedRevisionID = state.revisionID
-            updateDocumentPresentation()
+            if markDiscardedChanges {
+                savedRevisionID = state.revisionID
+                updateDocumentPresentation()
+            }
             return true
         default:
             return false

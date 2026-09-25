@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Release notes — Capture for macOS</title>
+    <meta name="description" content="What’s new in Capture. September 24, 2026: independent canvases, faster clipboard paste, better text annotations, and a canvas that grows with your edits." />
+    <meta property="og:title" content="Release notes — Capture for macOS" />
+    <meta property="og:description" content="September 24, 2026: multiple canvases, text background controls, and expanded canvas output." />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#f8fbfd" />
+    <link rel="icon" href="app-icon.svg" />
+    <link rel="apple-touch-icon" href="app-icon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        color-scheme: light;
+        --page: #f8fbfd;
+        --ink: #102033;
+        --muted: #536b7d;
+        --blue: #0ea5e9;
+        --deep: #075985;
+        --line: #dbeaf2;
+        --mono: "IBM Plex Mono", monospace;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, #eef8fe 0, var(--page) 520px);
+        color: var(--ink);
+        font-family: "Instrument Sans", "Avenir Next", sans-serif;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+      a { color: var(--deep); text-underline-offset: 4px; }
+      a:focus-visible { outline: 3px solid var(--deep); outline-offset: 5px; border-radius: 3px; }
+      h1, h2, h3, p { margin: 0; }
+      .wrap { width: min(1120px, calc(100% - 44px)); margin-inline: auto; }
+      .skip { position: absolute; left: 22px; top: -80px; padding: 10px 16px; background: white; z-index: 50; }
+      .skip:focus { top: 12px; }
+      .nav { border-bottom: 1px solid var(--line); background: rgba(255,255,255,.82); }
+      .nav-inner { min-height: 68px; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+      .brand { display: inline-flex; align-items: center; gap: 11px; font-size: 18px; font-weight: 800; text-decoration: none; letter-spacing: -.02em; }
+      .brand img { width: 36px; height: 36px; border-radius: 11px; box-shadow: 0 8px 24px #0ea5e921; }
+      .nav-links { display: flex; align-items: center; gap: 26px; font-size: 14px; font-weight: 700; }
+      .nav-links a { text-decoration: none; }
+      .nav-links a:hover { text-decoration: underline; }
+      .button { display: inline-flex; justify-content: center; align-items: center; min-height: 42px; padding: 9px 19px; border-radius: 999px; background: var(--deep); color: white; font-size: 14px; font-weight: 700; text-decoration: none; }
+      .button:hover { background: #064568; }
+      .hero { padding: 86px 0 72px; max-width: 780px; }
+      .eyebrow { color: var(--deep); font: 500 11px/1.5 var(--mono); text-transform: uppercase; letter-spacing: .13em; }
+      h1 { margin-top: 20px; font-size: clamp(44px, 6vw, 72px); line-height: 1.06; font-weight: 600; letter-spacing: -.05em; }
+      h1 span { color: var(--deep); }
+      .intro { max-width: 540px; margin-top: 24px; font-size: 19px; color: var(--muted); }
+      .release { display: grid; grid-template-columns: 205px minmax(0,1fr); gap: 42px; padding: 48px 0 76px; border-top: 1px solid var(--line); scroll-margin-top: 24px; }
+      .release-meta { padding-top: 5px; }
+      .latest { display: inline-flex; align-items: center; gap: 8px; color: var(--deep); font: 500 11px/1.5 var(--mono); letter-spacing: .09em; text-transform: uppercase; }
+      .latest::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 4px #d9f2ff; }
+      .release-date { display: block; margin-top: 20px; font-size: 16px; font-weight: 600; }
+      .platform { margin-top: 5px; color: var(--muted); font-size: 13px; }
+      .permalink { display: inline-block; margin-top: 22px; font-size: 13px; }
+      .release-content { max-width: 780px; }
+      h2 { max-width: 640px; font-size: clamp(30px, 4vw, 43px); line-height: 1.15; font-weight: 600; letter-spacing: -.035em; text-wrap: balance; }
+      .release-intro { margin-top: 20px; max-width: 640px; color: var(--muted); font-size: 18px; }
+      .shortcut-strip { display: flex; flex-wrap: wrap; gap: 20px 30px; margin-top: 30px; padding: 22px 0; border-block: 1px solid var(--line); }
+      .shortcut { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+      kbd { display: inline-block; min-width: 45px; padding: 4px 8px; border: 1px solid #cadde8; border-bottom-width: 2px; border-radius: 6px; background: white; color: var(--ink); font: 500 12px/1.5 var(--mono); text-align: center; white-space: nowrap; }
+      .change { padding-top: 36px; }
+      .change-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; }
+      .number { flex: 0 0 auto; color: var(--deep); font: 500 11px/1.5 var(--mono); }
+      h3 { font-size: 23px; font-weight: 600; line-height: 1.3; letter-spacing: -.025em; }
+      .change ul { padding-left: 19px; margin: 0; color: var(--muted); }
+      .change li { padding-left: 5px; margin-top: 13px; }
+      .change li::marker { color: #71a6c3; font-size: .8em; }
+      .change strong { color: var(--ink); font-weight: 600; }
+      .release-screenshot { margin: 30px 0 0; }
+      .release-screenshot a { display: block; border-radius: 12px; }
+      .release-screenshot img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 30px rgba(7,89,133,.07); }
+      .release-screenshot figcaption { margin-top: 12px; color: var(--muted); font-size: 13px; }
+      .release-screenshot figcaption a { display: inline; }
+      .footer-cta { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; align-items: center; gap: 22px; margin: 54px auto 0; padding: 26px; border: 1px solid var(--line); border-radius: 28px; background: white; box-shadow: 0 16px 42px rgba(7,89,133,.08); }
+      .footer-cta img { display: block; width: 64px; height: 64px; border-radius: 18px; }
+      .footer-cta h2 { font-size: 29px; font-weight: 800; line-height: 1; letter-spacing: -.04em; }
+      .footer-cta p { margin-top: 7px; color: var(--muted); font-size: 15px; }
+      .footer-cta .button { background: var(--blue); font-weight: 800; box-shadow: 0 14px 32px rgba(14,165,233,.24); }
+      .footer-cta .button:hover { background: var(--deep); }
+      .legal { padding: 34px 0 42px; color: var(--muted); font-size: 14px; text-align: center; }
+      .legal a { color: var(--deep); font-weight: 700; text-decoration: none; }
+      .legal a:hover { text-decoration: underline; }
+      @media (max-width: 980px) {
+        .footer-cta { grid-template-columns: 1fr; text-align: center; }
+        .footer-cta img { margin: 0 auto; }
+      }
+      @media (max-width: 760px) {
+        .hero { padding: 58px 0 45px; }
+        .release { grid-template-columns: 1fr; gap: 28px; padding-top: 30px; }
+        .release-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 20px; }
+        .release-date, .platform, .permalink { margin: 0; }
+        .platform { display: none; }
+        .permalink { margin-left: auto; }
+        .intro, .release-intro { font-size: 17px; }
+      }
+      @media (max-width: 480px) {
+        .wrap { width: calc(100% - 32px); }
+        .nav-links { gap: 15px; font-size: 12px; }
+        .nav-links .button { min-height: 38px; padding: 8px 12px; font-size: 12px; }
+        .brand { font-size: 16px; gap: 8px; }
+        .brand img { width: 30px; height: 30px; }
+        .shortcut-strip { gap: 16px; }
+      }
+      @media print {
+        body { background: white; }
+        .nav, .skip, .footer-cta, footer, .permalink { display: none; }
+        .hero { padding: 20px 0 30px; }
+        .release { grid-template-columns: 1fr; gap: 20px; }
+        .change { break-inside: avoid; }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to release notes</a>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="index.html" aria-label="Capture home">
+          <img src="app-icon.svg" alt="" width="36" height="36" />
+          <span>Capture</span>
+        </a>
+        <nav class="nav-links" aria-label="Primary navigation">
+          <a href="release-notes.html" aria-current="page">Release notes</a>
+          <a class="button" href="Capture.dmg" download>Download</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" class="wrap">
+      <div class="hero">
+        <p class="eyebrow">Release notes</p>
+        <h1>Release notes</h1>
+        <p class="intro">Changes to Capture, listed by release date.</p>
+      </div>
+
+      <!-- Add future releases above this article. Keep each dated screenshot unchanged to preserve the visual history. -->
+      <article class="release" id="2026-09-24" aria-labelledby="release-title-2026-09-24">
+        <div class="release-meta">
+          <span class="latest">Latest update</span>
+          <time class="release-date" datetime="2026-09-24">September 24, 2026</time>
+          <p class="platform">Capture for macOS</p>
+          <a class="permalink" href="#2026-09-24" aria-label="Link to the September 24, 2026 release">Link to this release ↗</a>
+        </div>
+        <div class="release-content">
+          <h2 id="release-title-2026-09-24">Canvas and text annotation updates</h2>
+          <p class="release-intro">Changes: multiple canvas windows, clipboard shortcuts, text background controls, and expanded canvas output.</p>
+
+          <figure class="release-screenshot">
+            <a href="releases/2026-09-24/capture.png" aria-label="View the full-size Capture screenshot from September 24, 2026">
+              <img src="releases/2026-09-24/capture.png" alt="Capture on September 24, 2026, showing the annotation toolbar, a text box with a translucent black background, an arrow, and a rectangle on a sample image." width="2400" height="1610" />
+            </a>
+            <figcaption>Capture · September 24, 2026 · Sample annotations. <a href="releases/2026-09-24/capture.png">View full size</a>; App size: 1.1 MB on disk</figcaption>
+          </figure>
+
+          <div class="shortcut-strip" aria-label="Keyboard shortcuts">
+            <span class="shortcut"><kbd aria-label="Command V">⌘ V</kbd> Paste an image</span>
+            <span class="shortcut"><kbd aria-label="Command N">⌘ N</kbd> New canvas</span>
+            <span class="shortcut"><kbd aria-label="Command W">⌘ W</kbd> Close canvas</span>
+          </div>
+
+          <section class="change" aria-labelledby="start-faster">
+            <div class="change-heading"><span class="number" aria-hidden="true">01</span><h3 id="start-faster">Clipboard and windows</h3></div>
+            <ul>
+              <li><strong>Command-V pastes clipboard images.</strong> While editing a text annotation, it pastes text.</li>
+              <li><strong>Multiple canvas windows.</strong> File → New Canvas opens an independent window. Each canvas keeps its own image, annotations, undo history, and save destination.</li>
+              <li><strong>Window-specific shortcuts and save prompts.</strong> Keyboard shortcuts act on the canvas you’re using. Closing a window or quitting checks for unsaved edits, and cancelling keeps your work available.</li>
+            </ul>
+          </section>
+
+          <section class="change" aria-labelledby="better-text">
+            <div class="change-heading"><span class="number" aria-hidden="true">02</span><h3 id="better-text">Text annotations</h3></div>
+            <ul>
+              <li><strong>Background colour and opacity.</strong> New text starts with a black background at 50% opacity. The Text Background menu lets you choose a colour and 0%, 25%, 50%, 75%, or 100% opacity. Changes support undo and redo.</li>
+              <li><strong>Click outside to select.</strong> Clicking outside a text box commits your text and switches to Select. It no longer creates another box. Choose Text again when you want to add a new annotation.</li>
+              <li><strong>Bounded text layout.</strong> While you type, text wraps within the box and automatic growth stays inside the image. Longer content remains scrollable while editing when it reaches the height limit.</li>
+              <li><strong>Resize handles and zoom.</strong> Visible corner and edge handles work even beyond the original image boundary. Text size, padding, and backgrounds stay consistent between editing and the finished result as you zoom.</li>
+            </ul>
+          </section>
+
+          <section class="change" aria-labelledby="more-room">
+            <div class="change-heading"><span class="number" aria-hidden="true">03</span><h3 id="more-room">Canvas bounds and output</h3></div>
+            <ul>
+              <li><strong>Unrestricted Select-tool transforms.</strong> Use Select to move or resize text, shapes, and arrows outside the image. Drawing new shapes and typing text remain constrained to the original image.</li>
+              <li><strong>Automatic canvas expansion.</strong> Extra space appears in white, and Fit includes the expanded area. Moving annotations back, deleting them, or undoing an edit adjusts the canvas bounds again.</li>
+              <li><strong>Expanded copy, save, and export.</strong> Copy, save, and export include annotations beyond the original image, including their stroke widths. Content is no longer cut off just because it crossed the old canvas edge.</li>
+            </ul>
+          </section>
+
+        </div>
+      </article>
+
+      <section class="footer-cta" aria-labelledby="download-heading">
+        <img src="app-icon.svg" alt="" width="64" height="64" />
+        <div>
+          <h2 id="download-heading">Capture for macOS</h2>
+          <p>A minimal macOS native annotation app.</p>
+        </div>
+        <a class="button" href="Capture.dmg" download>Download DMG</a>
+      </section>
+    </main>
+    <footer class="legal wrap">
+      Copyright © 2026 Sahand Sojoodi · <a href="index.html">Capture home</a> · <a href="#main">Back to top</a>
+    </footer>
+  </body>
+</html>

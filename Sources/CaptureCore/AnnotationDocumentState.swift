@@ -33,6 +33,26 @@ public final class AnnotationDocumentState {
     public init() {}
 
     public var hasImage: Bool { baseImage != nil }
+    public var canvasBounds: CGRect {
+        var result = CGRect(origin: .zero, size: imageSize)
+        for annotation in annotations where !(annotation is BlurAnnotation) {
+            var extent = annotation.bounds
+            let padding: CGFloat
+            switch annotation {
+            case let arrow as ArrowAnnotation:
+                padding = max(14, arrow.strokeWidth * 2.2) * 3.35 / 2 + 1
+            case let rectangle as RectangleAnnotation:
+                padding = rectangle.strokeWidth / 2 + 1
+            case let ellipse as EllipseAnnotation:
+                padding = ellipse.strokeWidth / 2 + 1
+            default:
+                padding = 0
+            }
+            extent = extent.insetBy(dx: -padding, dy: -padding)
+            result = result.union(extent)
+        }
+        return result.integral
+    }
     public var canUndo: Bool { !undoStack.isEmpty }
     public var canRedo: Bool { !redoStack.isEmpty }
 }
@@ -132,6 +152,17 @@ extension AnnotationDocumentState {
         default:
             return false
         }
+        return true
+    }
+
+    @discardableResult
+    public func applyTextBackgroundToSelected(_ color: NSColor) -> Bool {
+        guard let text = annotation(with: selectedAnnotationID) as? TextAnnotation else { return false }
+        let drawsBackground = color.alphaComponent > 0
+        guard !colorsMatch(text.backgroundColor, color) || text.drawsBackground != drawsBackground else { return false }
+        recordUndoSnapshot()
+        text.backgroundColor = color
+        text.drawsBackground = drawsBackground
         return true
     }
 

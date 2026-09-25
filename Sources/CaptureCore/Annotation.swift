@@ -108,8 +108,8 @@ public final class TextAnnotation: Annotation {
         text: String = "Text",
         fontSize: CGFloat = 32,
         textColor: NSColor = CapturePalette.softRed,
-        backgroundColor: NSColor = CapturePalette.softRed,
-        drawsBackground: Bool = false
+        backgroundColor: NSColor = NSColor.black.withAlphaComponent(0.5),
+        drawsBackground: Bool = true
     ) {
         self.id = id
         self.bounds = bounds.normalized
@@ -120,7 +120,7 @@ public final class TextAnnotation: Annotation {
         self.drawsBackground = drawsBackground
     }
 
-    public func draw(in context: CGContext, baseImage: CGImage?, imageSize: CGSize, scale: CGFloat) {
+    public func drawBackground(in context: CGContext) {
         if drawsBackground {
             context.saveGState()
             context.setFillColor(backgroundColor.cgColor)
@@ -129,6 +129,10 @@ public final class TextAnnotation: Annotation {
             context.fillPath()
             context.restoreGState()
         }
+    }
+
+    public func draw(in context: CGContext, baseImage: CGImage?, imageSize: CGSize, scale: CGFloat) {
+        drawBackground(in: context)
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center

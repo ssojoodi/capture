@@ -3,8 +3,10 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 *.xcscmblueprint
+*.dmg
 .DS_Store
 release.env
 Config/LocalSigning.xcconfig
 
 docs/
+artifacts/verification/
