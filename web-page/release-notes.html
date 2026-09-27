@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Release notes — Capture for macOS</title>
-    <meta name="description" content="What’s new in Capture. September 24, 2026: independent canvases, faster clipboard paste, better text annotations, and a canvas that grows with your edits." />
+    <meta name="description" content="What’s new in Capture. September 27, 2026: toolbar shortcuts with visible hints, annotation duplication, and corrected size selection." />
     <meta property="og:title" content="Release notes — Capture for macOS" />
-    <meta property="og:description" content="September 24, 2026: multiple canvases, text background controls, and expanded canvas output." />
+    <meta property="og:description" content="September 27, 2026: toolbar shortcuts, annotation duplication, size selection fixes, and About Capture." />
     <meta property="og:type" content="website" />
     <meta name="theme-color" content="#f8fbfd" />
     <link rel="icon" href="app-icon.svg" />
@@ -142,9 +142,60 @@
       </div>
 
       <!-- Add future releases above this article. Keep each dated screenshot unchanged to preserve the visual history. -->
-      <article class="release" id="2026-09-24" aria-labelledby="release-title-2026-09-24">
+      <article class="release" id="2026-09-27" aria-labelledby="release-title-2026-09-27">
         <div class="release-meta">
           <span class="latest">Latest update</span>
+          <time class="release-date" datetime="2026-09-27">September 27, 2026</time>
+          <p class="platform">Capture 2026.9.27 · macOS</p>
+          <a class="permalink" href="#2026-09-27" aria-label="Link to the September 27, 2026 release">Link to this release ↗</a>
+        </div>
+        <div class="release-content">
+          <h2 id="release-title-2026-09-27">Keyboard shortcuts and annotation controls</h2>
+          <p class="release-intro">Tool and size shortcuts, visible shortcut hints, annotation duplication, and fixes to Size selection.</p>
+
+          <figure class="release-screenshot">
+            <a href="releases/2026-09-27/capture.png" aria-label="View the full-size Capture screenshot from September 27, 2026">
+              <img src="releases/2026-09-27/capture.png" alt="Capture 2026.9.27 with Option held: shortcut bubbles appear beside toolbar buttons and size controls. Size appears before Color and Text Background." width="3360" height="1618" />
+            </a>
+            <figcaption>Capture · September 27, 2026 · Shortcut hints shown while Option is held. <a href="releases/2026-09-27/capture.png">View full size</a>; App size: 1.2 MB on disk</figcaption>
+          </figure>
+
+          <div class="shortcut-strip" aria-label="New keyboard shortcuts">
+            <span class="shortcut"><kbd aria-label="Option A">⌥ A</kbd> Arrow</span>
+            <span class="shortcut"><kbd aria-label="Option 1 through 5">⌥ 1–5</kbd> XS through XL</span>
+            <span class="shortcut"><kbd aria-label="Command D">⌘ D</kbd> Duplicate annotation</span>
+          </div>
+
+          <section class="change" aria-labelledby="tool-shortcuts">
+            <div class="change-heading"><span class="number" aria-hidden="true">01</span><h3 id="tool-shortcuts">Toolbar shortcuts</h3></div>
+            <ul>
+              <li><strong>Option shortcuts for tools.</strong> Use Option-A for Arrow, Option-T for Text, and Option-E for Ellipse. Option-R selects Rectangle, Option-B selects Blur, and Option-C selects Crop.</li>
+              <li><strong>Option-1 through Option-5 select sizes.</strong> The keys map to XS, S, M, L, and XL, including while editing text.</li>
+              <li><strong>Hold Option to see the keys.</strong> Bubbles show tool and size shortcuts, Esc for Select, and full Command shortcuts such as ⌘= for Zoom In.</li>
+              <li><strong>Keep text when switching tools.</strong> Tool shortcuts commit active text. Esc commits the text and returns to Select.</li>
+            </ul>
+          </section>
+
+          <section class="change" aria-labelledby="annotation-controls">
+            <div class="change-heading"><span class="number" aria-hidden="true">02</span><h3 id="annotation-controls">Duplication and size selection</h3></div>
+            <ul>
+              <li><strong>Duplicate selected annotations with Command-D.</strong> The copy keeps the original style, appears slightly offset, and can be edited independently. Duplication supports undo and redo.</li>
+              <li><strong>Size matches the annotation.</strong> New arrows and shapes start at the displayed M size. Selecting an annotation or undoing a size change updates the Size control.</li>
+              <li><strong>Compact toolbar layout.</strong> Size appears before Color and Text Background. Shortcut bubbles do not increase the toolbar height.</li>
+            </ul>
+          </section>
+
+          <section class="change" aria-labelledby="about-version">
+            <div class="change-heading"><span class="number" aria-hidden="true">03</span><h3 id="about-version">About Capture</h3></div>
+            <ul>
+              <li><strong>App version and build number.</strong> Capture → About Capture shows the version, build number, and copyright. Versions use the release date in year.month.day format.</li>
+            </ul>
+          </section>
+        </div>
+      </article>
+
+      <article class="release" id="2026-09-24" aria-labelledby="release-title-2026-09-24">
+        <div class="release-meta">
           <time class="release-date" datetime="2026-09-24">September 24, 2026</time>
           <p class="platform">Capture for macOS</p>
           <a class="permalink" href="#2026-09-24" aria-label="Link to the September 24, 2026 release">Link to this release ↗</a>

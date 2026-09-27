@@ -8,3 +8,5 @@ Keep each release's screenshots in its own dated directory, such as `2026-09-24/
 - Preserve older screenshots. Add a new directory for each release instead of replacing an earlier image.
 - Describe released behavior factually; use a date unless a version number is established.
 - Record the app bundle's measured disk usage in the screenshot caption for each release, rather than the compressed DMG size. The September 24 caption currently uses the existing July 6 download: `du -sk Capture.app` reported 1,088 KiB (about 1.1 MB). Update that figure when the matching release build is packaged.
+
+The September 27 caption uses the optimized Release build of Capture 2026.9.27 (build 1): `du -sk` reported 1,200 KiB (about 1.2 MB on disk) before signing. Recheck the caption after packaging if signing changes the rounded size.
