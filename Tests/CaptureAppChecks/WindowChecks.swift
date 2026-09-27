@@ -53,6 +53,7 @@ enum WindowChecks {
         app.mainMenu = AppMenu.makeMenu()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             autoreleasepool {
+                runDuplicateChecks()
                 runTextBoundsChecks()
                 runTextClickAwayChecks()
                 runTextBackgroundChecks()
@@ -63,6 +64,36 @@ enum WindowChecks {
             exit(0)
         }
         app.run()
+    }
+
+    static func runDuplicateChecks() {
+        let state = AnnotationDocumentState()
+        let controller = MainWindowController(state: state)
+        let window = controller.window!
+        controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+        let canvas = canvas(in: window)
+        precondition(canvas.droppedImageHandler!(NSImage(size: NSSize(width: 600, height: 400))))
+        let menuItem = NSMenuItem(title: "Duplicate", action: #selector(MainWindowController.duplicateSelected(_:)), keyEquivalent: "d")
+        precondition(!controller.validateMenuItem(menuItem))
+        controller.selectTool(NSToolbarItem(itemIdentifier: .init("text")))
+        let location = canvas.convert(NSPoint(x: canvas.bounds.midX, y: canvas.bounds.midY), to: nil)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: location, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+        editor.textView.insertText("Copy this text", replacementRange: NSRange(location: 0, length: 0))
+        precondition(controller.validateMenuItem(menuItem))
+        precondition(NSApp.mainMenu!.performKeyEquivalent(with: key("d", window: window)))
+        precondition(!canvas.isEditingText && state.selectedTool == .select)
+        precondition(state.annotations.count == 2)
+        precondition(state.annotations.allSatisfy { ($0 as? TextAnnotation)?.text == "Copy this text" })
+        precondition(state.selectedAnnotationID == state.annotations.last!.id)
+        controller.undo(nil)
+        precondition(state.annotations.count == 1)
+        controller.redo(nil)
+        precondition(state.annotations.count == 2)
+        respondToAlerts([.alertSecondButtonReturn]) { window.performClose(nil) }
+        print("PASS: Cmd-D commits text, duplicates selection, and supports undo/redo")
     }
 
     static func runChecks(app: NSApplication, delegate: AppDelegate) {

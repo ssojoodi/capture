@@ -3,6 +3,54 @@ import XCTest
 @testable import CaptureCore
 
 final class AnnotationCoreTests: XCTestCase {
+    func testDuplicateAnnotationsPreserveStyleAndSupportUndo() throws {
+        let rect = CGRect(x: 20, y: 40, width: 120, height: 60)
+        let originals: [Annotation] = [
+            ArrowAnnotation(start: rect.origin, end: CGPoint(x: 140, y: 100), color: .blue, strokeWidth: 24),
+            TextAnnotation(bounds: rect, text: "Duplicate me", fontSize: 40, textColor: .green, backgroundColor: .purple, drawsBackground: false),
+            RectangleAnnotation(bounds: rect, strokeColor: .blue, strokeWidth: 12),
+            EllipseAnnotation(bounds: rect, strokeColor: .green, strokeWidth: 32),
+            BlurAnnotation(bounds: rect, radius: 22)
+        ]
+        for original in originals {
+            let state = AnnotationDocumentState()
+            state.addAnnotation(original)
+            let copy = try XCTUnwrap(state.duplicateSelectedAnnotation())
+            XCTAssertFalse(copy === original)
+            XCTAssertNotEqual(copy.id, original.id)
+            XCTAssertEqual(copy.bounds, original.bounds.offsetBy(dx: 20, dy: -20))
+            XCTAssertEqual(state.selectedAnnotationID, copy.id)
+            XCTAssertEqual(copy.copyAnnotation().id, copy.id, "Snapshots retain identity")
+            switch (original, copy) {
+            case let (a as ArrowAnnotation, b as ArrowAnnotation):
+                XCTAssertEqual(a.color, b.color); XCTAssertEqual(a.strokeWidth, b.strokeWidth)
+            case let (a as TextAnnotation, b as TextAnnotation):
+                XCTAssertEqual(a.text, b.text); XCTAssertEqual(a.fontSize, b.fontSize)
+                XCTAssertEqual(a.textColor, b.textColor); XCTAssertEqual(a.backgroundColor, b.backgroundColor)
+                XCTAssertEqual(a.drawsBackground, b.drawsBackground)
+            case let (a as RectangleAnnotation, b as RectangleAnnotation):
+                XCTAssertEqual(a.strokeColor, b.strokeColor); XCTAssertEqual(a.strokeWidth, b.strokeWidth)
+            case let (a as EllipseAnnotation, b as EllipseAnnotation):
+                XCTAssertEqual(a.strokeColor, b.strokeColor); XCTAssertEqual(a.strokeWidth, b.strokeWidth)
+            case let (a as BlurAnnotation, b as BlurAnnotation): XCTAssertEqual(a.radius, b.radius)
+            default: XCTFail("Duplicate changed annotation type")
+            }
+            copy.moveBy(dx: 100, dy: 0)
+            XCTAssertEqual(original.bounds, rect)
+            XCTAssertTrue(state.undo())
+            XCTAssertEqual(state.annotations.count, 1)
+            XCTAssertEqual(state.selectedAnnotationID, original.id)
+            XCTAssertTrue(state.redo())
+            XCTAssertEqual(state.annotations.count, 2)
+            XCTAssertEqual(state.selectedAnnotationID, copy.id)
+        }
+        let empty = AnnotationDocumentState()
+        let revision = empty.revisionID
+        XCTAssertNil(empty.duplicateSelectedAnnotation())
+        XCTAssertEqual(empty.revisionID, revision)
+        XCTAssertFalse(empty.undo())
+    }
+
     func testArrowHitTestingIncludesLineAndExcludesFarPoint() {
         let arrow = ArrowAnnotation(start: CGPoint(x: 10, y: 10), end: CGPoint(x: 110, y: 10), strokeWidth: 6)
         XCTAssertTrue(arrow.hitTest(CGPoint(x: 50, y: 12)))

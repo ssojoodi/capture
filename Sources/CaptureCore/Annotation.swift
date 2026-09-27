@@ -6,7 +6,11 @@ public protocol Annotation: AnyObject {
     func draw(in context: CGContext, baseImage: CGImage?, imageSize: CGSize, scale: CGFloat)
     func hitTest(_ point: CGPoint) -> Bool
     func moveBy(dx: CGFloat, dy: CGFloat)
-    func copyAnnotation() -> Annotation
+    func copyAnnotation(id: UUID) -> Annotation
+}
+
+public extension Annotation {
+    func copyAnnotation() -> Annotation { copyAnnotation(id: id) }
 }
 
 public final class ArrowAnnotation: Annotation {
@@ -88,7 +92,7 @@ public final class ArrowAnnotation: Annotation {
         end.y += dy
     }
 
-    public func copyAnnotation() -> Annotation {
+    public func copyAnnotation(id: UUID) -> Annotation {
         ArrowAnnotation(id: id, start: start, end: end, color: color, strokeWidth: strokeWidth)
     }
 }
@@ -157,7 +161,7 @@ public final class TextAnnotation: Annotation {
         bounds.origin.y += dy
     }
 
-    public func copyAnnotation() -> Annotation {
+    public func copyAnnotation(id: UUID) -> Annotation {
         TextAnnotation(id: id, bounds: bounds, text: text, fontSize: fontSize, textColor: textColor, backgroundColor: backgroundColor, drawsBackground: drawsBackground)
     }
 }
@@ -192,7 +196,7 @@ public final class RectangleAnnotation: Annotation {
         bounds.origin.y += dy
     }
 
-    public func copyAnnotation() -> Annotation {
+    public func copyAnnotation(id: UUID) -> Annotation {
         RectangleAnnotation(id: id, bounds: bounds, strokeColor: strokeColor, strokeWidth: strokeWidth)
     }
 }
@@ -233,7 +237,7 @@ public final class EllipseAnnotation: Annotation {
         bounds.origin.y += dy
     }
 
-    public func copyAnnotation() -> Annotation {
+    public func copyAnnotation(id: UUID) -> Annotation {
         EllipseAnnotation(id: id, bounds: bounds, strokeColor: strokeColor, strokeWidth: strokeWidth)
     }
 }
@@ -293,7 +297,7 @@ public final class BlurAnnotation: Annotation {
         bounds.origin.y += dy
     }
 
-    public func copyAnnotation() -> Annotation {
+    public func copyAnnotation(id: UUID) -> Annotation {
         BlurAnnotation(id: id, bounds: bounds, radius: radius)
     }
 }

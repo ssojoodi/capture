@@ -93,6 +93,15 @@ extension AnnotationDocumentState {
         annotations.reversed().first { $0.hitTest(point) }
     }
 
+    @discardableResult
+    public func duplicateSelectedAnnotation() -> Annotation? {
+        guard let original = annotation(with: selectedAnnotationID) else { return nil }
+        let duplicate = original.copyAnnotation(id: UUID())
+        duplicate.moveBy(dx: 20, dy: -20)
+        addAnnotation(duplicate)
+        return duplicate
+    }
+
     public func deleteSelectedAnnotation() {
         guard let selectedAnnotationID else { return }
         recordUndoSnapshot()

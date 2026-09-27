@@ -2,8 +2,8 @@ import AppKit
 import CaptureCore
 import UniformTypeIdentifiers
 
-final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSMenuDelegate {
-    private let state = AnnotationDocumentState()
+final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSMenuDelegate, NSMenuItemValidation {
+    private let state: AnnotationDocumentState
     private let canvasView: AnnotationCanvasView
     private let statusLabel = NSTextField(labelWithString: "Open, paste, or drop an image to start")
     private var keyMonitor: Any?
@@ -62,7 +62,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         ]
     }
 
-    init() {
+    init(state: AnnotationDocumentState = AnnotationDocumentState()) {
+        self.state = state
         canvasView = AnnotationCanvasView(state: state)
         let window = NSWindow(
             contentRect: NSRect(x: 100, y: 100, width: 1120, height: 780),
@@ -462,6 +463,21 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 statusLabel.stringValue = "Export failed: \(error.localizedDescription)"
             }
         }
+    }
+
+    @objc func duplicateSelected(_ sender: Any?) {
+        canvasView.commitTextEditing()
+        guard state.duplicateSelectedAnnotation() != nil else { return }
+        state.selectedTool = .select
+        canvasView.toolDidChange()
+        canvasView.needsDisplay = true
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(duplicateSelected(_:)) {
+            return state.annotation(with: state.selectedAnnotationID) != nil
+        }
+        return true
     }
 
     @objc func deleteSelected(_ sender: Any?) {
