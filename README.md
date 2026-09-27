@@ -56,7 +56,7 @@ make run
 ## App Version
 
 Capture → About Capture shows the app version and build number. Set `MARKETING_VERSION`
-(currently `1.0.0`) and `CURRENT_PROJECT_VERSION` (currently `1`) in the Capture target's
+to the release date in `year.month.day` format (currently `2026.9.27`) and `CURRENT_PROJECT_VERSION` (currently `1`) in the Capture target's
 Debug and Release build settings before a release. Increment the build number for each
 published build. Both Xcode and `make release` use these settings.
 

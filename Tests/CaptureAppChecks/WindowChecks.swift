@@ -189,8 +189,9 @@ enum WindowChecks {
     static func runAboutChecks(app: NSApplication) {
         let appURL = URL(fileURLWithPath: ".build/DerivedData/Build/Products/Debug/Capture.app")
         let info = Bundle(url: appURL)!.infoDictionary!
-        precondition(info["CFBundleShortVersionString"] as? String == "1.0.0")
+        precondition(info["CFBundleShortVersionString"] as? String == "2026.9.27")
         precondition(info["CFBundleVersion"] as? String == "1")
+        precondition(info["NSHumanReadableCopyright"] as? String == "© Sahand Sojoodi, 2026")
         let menu = app.mainMenu!.items[0].submenu!
         let about = menu.items[0]
         precondition(about.title == "About Capture")
