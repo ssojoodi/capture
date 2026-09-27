@@ -53,6 +53,7 @@ enum WindowChecks {
         app.mainMenu = AppMenu.makeMenu()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             autoreleasepool {
+                runAboutChecks(app: app)
                 runDuplicateChecks()
                 runTextBoundsChecks()
                 runTextClickAwayChecks()
@@ -64,6 +65,22 @@ enum WindowChecks {
             exit(0)
         }
         app.run()
+    }
+
+    static func runAboutChecks(app: NSApplication) {
+        let appURL = URL(fileURLWithPath: ".build/DerivedData/Build/Products/Debug/Capture.app")
+        let info = Bundle(url: appURL)!.infoDictionary!
+        precondition(info["CFBundleShortVersionString"] as? String == "1.0.0")
+        precondition(info["CFBundleVersion"] as? String == "1")
+        let menu = app.mainMenu!.items[0].submenu!
+        let about = menu.items[0]
+        precondition(about.title == "About Capture")
+        precondition(about.action == #selector(NSApplication.orderFrontStandardAboutPanel(_:)))
+        let existing = Set(app.windows.map(\.windowNumber))
+        menu.performActionForItem(at: 0)
+        let panel = app.windows.first { !existing.contains($0.windowNumber) && $0.isVisible }!
+        panel.close()
+        print("PASS: About menu opens native panel; app contains version and build metadata")
     }
 
     static func runDuplicateChecks() {
