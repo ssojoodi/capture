@@ -13,6 +13,8 @@ enum AppMenu {
         main.addItem(editItem)
 
         let appMenu = NSMenu(title: appName)
+        appMenu.addItem(withTitle: "About \(appName)", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit \(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
 
@@ -37,6 +39,7 @@ enum AppMenu {
         pasteItem.keyEquivalentModifierMask = [.command, .shift]
         let copyItem = editMenu.addItem(withTitle: "Copy Image", action: #selector(MainWindowController.copyFlattenedImage(_:)), keyEquivalent: "c")
         copyItem.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(withTitle: "Duplicate", action: #selector(MainWindowController.duplicateSelected(_:)), keyEquivalent: "d")
         editMenu.addItem(withTitle: "Delete", action: #selector(MainWindowController.deleteSelected(_:)), keyEquivalent: "\u{8}")
         editItem.submenu = editMenu
 

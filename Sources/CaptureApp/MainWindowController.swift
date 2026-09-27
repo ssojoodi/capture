@@ -2,15 +2,25 @@ import AppKit
 import CaptureCore
 import UniformTypeIdentifiers
 
-final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSMenuDelegate {
-    private let state = AnnotationDocumentState()
+final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSMenuDelegate, NSMenuItemValidation {
+    private let state: AnnotationDocumentState
     private let canvasView: AnnotationCanvasView
     private let statusLabel = NSTextField(labelWithString: "Open, paste, or drop an image to start")
+    private weak var sizeControl: NSSegmentedControl?
     private var keyMonitor: Any?
     private var sourceURL: URL?
     private var sourceFormat: RasterImageFormat?
     private var savedRevisionID: UUID?
     var onWindowClosed: ((MainWindowController) -> Void)?
+    private static let toolShortcuts: [Tool: String] = [
+        .arrow: "a", .text: "t", .ellipse: "e", .rectangle: "r", .blur: "b", .crop: "c"
+    ]
+    private static let shortcutHints: [NSToolbarItem.Identifier: String] = [
+        .init(Tool.select.rawValue): "Esc",
+        ToolbarID.open: "⌘O", ToolbarID.paste: "⇧⌘V", ToolbarID.save: "⌘S",
+        ToolbarID.copy: "⇧⌘C", ToolbarID.export: "⌘E", ToolbarID.undo: "⌘Z",
+        ToolbarID.redo: "⇧⌘Z", ToolbarID.zoomIn: "⌘=", ToolbarID.zoomOut: "⌘−", ToolbarID.zoomFit: "⌘0"
+    ]
     private static let textBackgroundColors = [
         CaptureColor(name: "Black", color: .black),
         CaptureColor(name: "White", color: .white)
@@ -62,7 +72,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         ]
     }
 
-    init() {
+    init(state: AnnotationDocumentState = AnnotationDocumentState()) {
+        self.state = state
         canvasView = AnnotationCanvasView(state: state)
         let window = NSWindow(
             contentRect: NSRect(x: 100, y: 100, width: 1120, height: 780),
@@ -83,12 +94,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(state.selectedTool.rawValue)
         canvasView.toolSelectionHandler = { [weak self] tool in
             self?.window?.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(tool.rawValue)
+            self?.updateSizeControl()
+            self?.updateToolButtons()
         }
+        updateToolButtons()
         installKeyMonitor()
         canvasView.statusHandler = { [weak self] text in self?.statusLabel.stringValue = text }
         canvasView.droppedFileHandler = { [weak self] url in self?.openDroppedFile(url) ?? false }
         canvasView.droppedImageHandler = { [weak self] image in self?.replaceWithImage(image, sourceURL: nil, message: "Dropped image") ?? false }
-        state.revisionDidChange = { [weak self] _ in self?.updateDocumentPresentation() }
+        state.selectionDidChange = { [weak self] in self?.updateSizeControl() }
+        state.revisionDidChange = { [weak self] _ in
+            self?.updateDocumentPresentation()
+            self?.updateSizeControl()
+        }
     }
 
     required init?(coder: NSCoder) { nil }
@@ -100,10 +118,35 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, let window = self.window,
-                  event.window === window, window.isKeyWindow,
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+            guard let self, let window = self.window else { return event }
+            if event.type == .flagsChanged {
+                self.updateShortcutHints(event.modifierFlags)
+                return event
+            }
+            guard event.window === window, window.isKeyWindow,
                   NSApp.modalWindow == nil, window.attachedSheet == nil else { return event }
+            let shortcutModifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
+            if shortcutModifiers == .option,
+               let key = event.characters(byApplyingModifiers: [])?.lowercased() {
+                if let tool = Self.toolShortcuts.first(where: { $0.value == key })?.key {
+                    if !event.isARepeat {
+                        self.activateTool(tool)
+                    }
+                    return nil
+                }
+                if let number = Int(key), let preset = AnnotationCanvasView.SizePreset(rawValue: number - 1) {
+                    if !event.isARepeat && self.canvasView.canChangeSize {
+                        self.canvasView.applySelectedSize(preset)
+                        self.updateSizeControl()
+                    }
+                    return nil
+                }
+            }
+            if event.keyCode == 53 && shortcutModifiers.isEmpty {
+                self.activateTool(.select)
+                return nil
+            }
             if self.canvasView.isEditingText || window.firstResponder is NSTextView {
                 return event
             }
@@ -133,13 +176,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             }
             if event.keyCode == 51 {
                 self.deleteSelected(nil)
-                return nil
-            }
-            if event.keyCode == 53 {
-                self.state.selectedTool = .select
-                self.canvasView.cancelInteraction()
-                self.canvasView.toolDidChange()
-                self.statusLabel.stringValue = "Tool: select"
                 return nil
             }
             return event
@@ -198,9 +234,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             ToolbarID.undo,
             ToolbarID.redo,
             .space,
+            ToolbarID.thickness,
             ToolbarID.color,
             ToolbarID.textBackground,
-            ToolbarID.thickness,
             .space,
             ToolbarID.zoomOut,
             ToolbarID.zoomIn,
@@ -244,6 +280,30 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         item.image = NSImage(systemSymbolName: spec.symbol, accessibilityDescription: spec.label)
         item.target = self
         item.action = spec.action
+        let tool = Tool(rawValue: spec.identifier.rawValue)
+        let optionKey = tool.flatMap { Self.toolShortcuts[$0] }
+        if let hint = optionKey?.uppercased() ?? Self.shortcutHints[spec.identifier] {
+            let button = ShortcutToolButton(frame: NSRect(x: 0, y: 0, width: 52, height: 34))
+            button.shortcut = hint
+            button.image = item.image?.withSymbolConfiguration(.init(pointSize: 20, weight: .regular))
+            button.widthAnchor.constraint(equalToConstant: 52).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 34).isActive = true
+            button.imagePosition = .imageOnly
+            button.bezelStyle = .texturedRounded
+            button.setButtonType(tool == nil ? .momentaryPushIn : .toggle)
+            button.isBordered = false
+            button.identifier = .init(spec.identifier.rawValue)
+            button.target = self
+            button.action = spec.action
+            button.setAccessibilityLabel(spec.label)
+            item.toolTip = "\(spec.label) (\(optionKey == nil ? hint : "⌥" + hint))"
+            button.toolTip = item.toolTip
+            item.view = button
+            let menuItem = NSMenuItem(title: spec.label, action: spec.action, keyEquivalent: "")
+            menuItem.target = self
+            menuItem.representedObject = spec.identifier.rawValue
+            item.menuFormRepresentation = menuItem
+        }
         return item
     }
 
@@ -331,9 +391,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let item = NSToolbarItem(itemIdentifier: identifier)
         item.label = "Size"
         item.paletteLabel = "Size"
-        let control = NSSegmentedControl(labels: ["XS", "S", "M", "L", "XL"], trackingMode: .selectOne, target: self, action: #selector(selectThickness(_:)))
+        let control = ShortcutSizeControl(labels: AnnotationCanvasView.SizePreset.allCases.map(\.label), trackingMode: .selectOne, target: self, action: #selector(selectThickness(_:)))
         control.frame = NSRect(x: 0, y: 0, width: 142, height: 28)
-        control.selectedSegment = 2
+        control.segmentDistribution = .fillEqually
+        for preset in AnnotationCanvasView.SizePreset.allCases {
+            control.setToolTip("\(preset.label) (⌥\(preset.rawValue + 1))", forSegment: preset.rawValue)
+        }
+        sizeControl = control
+        updateSizeControl()
         item.view = control
         item.minSize = NSSize(width: 142, height: 28)
         item.maxSize = NSSize(width: 152, height: 28)
@@ -346,10 +411,16 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             raw = item.itemIdentifier.rawValue
         } else if let button = sender as? NSButton {
             raw = button.identifier?.rawValue
+        } else if let menuItem = sender as? NSMenuItem {
+            raw = menuItem.representedObject as? String
         } else {
             raw = nil
         }
         guard let raw, let tool = Tool(rawValue: raw) else { return }
+        activateTool(tool)
+    }
+
+    private func activateTool(_ tool: Tool) {
         state.selectedTool = tool
         canvasView.toolDidChange()
         statusLabel.stringValue = "Tool: \(tool.rawValue)"
@@ -373,15 +444,20 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         canvasView.applySelectedColor(CapturePalette.all[index].color)
     }
 
+    private func updateSizeControl() {
+        sizeControl?.isEnabled = canvasView.canChangeSize
+        sizeControl?.needsDisplay = true
+        sizeControl?.selectedSegment = canvasView.canChangeSize ? (canvasView.selectedSizePreset?.rawValue ?? -1) : -1
+    }
+
     @objc func selectThickness(_ sender: NSSegmentedControl) {
-        let lineThicknesses: [CGFloat] = [4, 12, 16, 24, 32]
-        let textSizes: [CGFloat] = [32, 40, 52, 64, 82]
-        let index = sender.selectedSegment
-        guard lineThicknesses.indices.contains(index), textSizes.indices.contains(index) else { return }
-        canvasView.applySelectedSize(lineThickness: lineThicknesses[index], textSize: textSizes[index])
+        guard let preset = AnnotationCanvasView.SizePreset(rawValue: sender.selectedSegment) else { return }
+        canvasView.applySelectedSize(preset)
+        updateSizeControl()
     }
 
     @objc func undo(_ sender: Any?) {
+        canvasView.commitTextEditing()
         canvasView.cancelInteraction()
         if state.undo() {
             canvasView.needsDisplay = true
@@ -392,6 +468,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @objc func redo(_ sender: Any?) {
+        canvasView.commitTextEditing()
         canvasView.cancelInteraction()
         if state.redo() {
             canvasView.needsDisplay = true
@@ -464,10 +541,55 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
 
+    @objc func duplicateSelected(_ sender: Any?) {
+        canvasView.commitTextEditing()
+        guard state.duplicateSelectedAnnotation() != nil else { return }
+        state.selectedTool = .select
+        canvasView.toolDidChange()
+        canvasView.needsDisplay = true
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(duplicateSelected(_:)) {
+            return state.annotation(with: state.selectedAnnotationID) != nil
+        }
+        return true
+    }
+
     @objc func deleteSelected(_ sender: Any?) {
         canvasView.cancelInteraction()
         state.deleteSelectedAnnotation()
         canvasView.needsDisplay = true
+    }
+
+    private func updateToolButtons() {
+        for item in window?.toolbar?.items ?? [] {
+            guard Tool(rawValue: item.itemIdentifier.rawValue) != nil else { continue }
+            let selected: NSControl.StateValue = item.itemIdentifier.rawValue == state.selectedTool.rawValue ? .on : .off
+            (item.view as? ShortcutToolButton)?.state = selected
+            item.menuFormRepresentation?.state = selected
+        }
+    }
+
+    private func updateShortcutHints(_ modifiers: NSEvent.ModifierFlags) {
+        let show = modifiers.contains(.option) && window?.isKeyWindow == true
+            && NSApp.modalWindow == nil && window?.attachedSheet == nil
+        for item in window?.toolbar?.items ?? [] {
+            (item.view as? ShortcutToolButton)?.showsShortcut = show
+            (item.view as? ShortcutSizeControl)?.showsShortcuts = show
+        }
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        updateShortcutHints(NSEvent.modifierFlags)
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        updateShortcutHints([])
+    }
+
+    func windowWillBeginSheet(_ notification: Notification) {
+        updateShortcutHints([])
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -627,6 +749,46 @@ private extension RasterImageFormat {
         switch self {
         case .jpeg: "jpg"
         case .png: "png"
+        }
+    }
+}
+
+// Drawing the badge inside the button keeps its hit target and toolbar overflow behavior intact.
+final class ShortcutToolButton: NSButton {
+    var shortcut = ""
+    var showsShortcut = false { didSet { needsDisplay = true } }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard showsShortcut else { return }
+        ShortcutBadge.draw(shortcut, at: CGPoint(x: bounds.maxX, y: bounds.maxY - 15))
+    }
+}
+
+private enum ShortcutBadge {
+    static func draw(_ text: String, at topRight: CGPoint, height: CGFloat = 15) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: height - 5, weight: .semibold),
+            .foregroundColor: NSColor.windowBackgroundColor
+        ]
+        let size = (text as NSString).size(withAttributes: attributes)
+        let width = max(height, ceil(size.width) + 4)
+        let badge = NSRect(x: topRight.x - width, y: topRight.y, width: width, height: height)
+        NSColor.labelColor.setFill()
+        NSBezierPath(roundedRect: badge, xRadius: 5, yRadius: 5).fill()
+        (text as NSString).draw(at: CGPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2), withAttributes: attributes)
+    }
+}
+
+final class ShortcutSizeControl: NSSegmentedControl {
+    var showsShortcuts = false { didSet { needsDisplay = true } }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard showsShortcuts && isEnabled else { return }
+        let segmentWidth = bounds.width / CGFloat(segmentCount)
+        for index in 0..<segmentCount {
+            ShortcutBadge.draw(String(index + 1), at: CGPoint(x: CGFloat(index + 1) * segmentWidth - 1, y: bounds.maxY - 12), height: 12)
         }
     }
 }

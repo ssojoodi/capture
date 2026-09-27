@@ -24,7 +24,10 @@ public final class AnnotationDocumentState {
     public private(set) var baseCGImage: CGImage?
     public private(set) var imageSize: CGSize = .zero
     public var selectedTool: Tool = .select
-    public var selectedAnnotationID: UUID?
+    public var selectedAnnotationID: UUID? {
+        didSet { selectionDidChange?() }
+    }
+    public var selectionDidChange: (() -> Void)?
     public var annotations: [Annotation] = []
     public private(set) var cropRect: CGRect?
     public private(set) var revisionID = UUID()
@@ -91,6 +94,15 @@ extension AnnotationDocumentState {
 
     public func annotation(at point: CGPoint) -> Annotation? {
         annotations.reversed().first { $0.hitTest(point) }
+    }
+
+    @discardableResult
+    public func duplicateSelectedAnnotation() -> Annotation? {
+        guard let original = annotation(with: selectedAnnotationID) else { return nil }
+        let duplicate = original.copyAnnotation(id: UUID())
+        duplicate.moveBy(dx: 20, dy: -20)
+        addAnnotation(duplicate)
+        return duplicate
     }
 
     public func deleteSelectedAnnotation() {

@@ -53,6 +53,16 @@ Build and open the app:
 make run
 ```
 
+## App Version
+
+Capture → About Capture shows the app version and build number. Set `MARKETING_VERSION`
+to the release date in `year.month.day` format (currently `2026.9.27`) and `CURRENT_PROJECT_VERSION` (currently `1`) in the Capture target's
+Debug and Release build settings before a release. Increment the build number for each
+published build. Both Xcode and `make release` use these settings.
+
+The Makefile's `VERSION` variable only names the temporary DMG file; it does not set
+the app version.
+
 ## Regenerate Assets
 
 Brand source files live in `Brand/`.
