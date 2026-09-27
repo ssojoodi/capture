@@ -24,7 +24,10 @@ public final class AnnotationDocumentState {
     public private(set) var baseCGImage: CGImage?
     public private(set) var imageSize: CGSize = .zero
     public var selectedTool: Tool = .select
-    public var selectedAnnotationID: UUID?
+    public var selectedAnnotationID: UUID? {
+        didSet { selectionDidChange?() }
+    }
+    public var selectionDidChange: (() -> Void)?
     public var annotations: [Annotation] = []
     public private(set) var cropRect: CGRect?
     public private(set) var revisionID = UUID()

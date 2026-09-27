@@ -3,6 +3,14 @@ import UniformTypeIdentifiers
 import CaptureCore
 
 final class AnnotationCanvasView: NSView {
+    enum SizePreset: Int, CaseIterable {
+        case extraSmall, small, medium, large, extraLarge
+
+        var label: String { ["XS", "S", "M", "L", "XL"][rawValue] }
+        var lineThickness: CGFloat { [4, 12, 16, 24, 32][rawValue] }
+        var textSize: CGFloat { [32, 40, 52, 64, 82][rawValue] }
+    }
+
     private enum CanvasInteraction {
         case idle
         case creatingAnnotation(start: CGPoint, annotation: Annotation)
@@ -16,8 +24,7 @@ final class AnnotationCanvasView: NSView {
     private var imageOrigin: CGPoint = .zero
     private var interaction: CanvasInteraction = .idle
     private var currentColor: NSColor = CapturePalette.softRed
-    private var currentLineThickness: CGFloat = 7
-    private var currentTextSize: CGFloat = 52
+    private var defaultSize: SizePreset = .medium
     private var currentTextBackground = NSColor.black.withAlphaComponent(0.5)
     private var activeTextEditor: TextAnnotationEditorView?
     private weak var activeTextAnnotation: TextAnnotation?
@@ -48,6 +55,7 @@ final class AnnotationCanvasView: NSView {
 
     func toolDidChange() {
         commitActiveTextEdit()
+        if state.selectedTool != .select { state.selectedAnnotationID = nil }
         textPlacementID = nil
         cancelInteraction()
         window?.invalidateCursorRects(for: self)
@@ -336,12 +344,12 @@ final class AnnotationCanvasView: NSView {
         let point = rawPoint.clampedToImage(size: state.imageSize)
         switch state.selectedTool {
         case .arrow:
-            interaction = .creatingAnnotation(start: point, annotation: ArrowAnnotation(start: point, end: point, color: currentColor, strokeWidth: currentLineThickness))
+            interaction = .creatingAnnotation(start: point, annotation: ArrowAnnotation(start: point, end: point, color: currentColor, strokeWidth: drawingSize.lineThickness))
         case .text:
             let annotation = TextAnnotation(
                 bounds: CGRect(origin: point, size: defaultTextAnnotationSize).fitted(inside: CGRect(origin: .zero, size: state.imageSize)),
                 text: "",
-                fontSize: currentTextSize,
+                fontSize: drawingSize.textSize,
                 textColor: currentColor,
                 backgroundColor: currentTextBackground,
                 drawsBackground: currentTextBackground.alphaComponent > 0
@@ -353,9 +361,9 @@ final class AnnotationCanvasView: NSView {
         case .blur:
             interaction = .creatingAnnotation(start: point, annotation: BlurAnnotation(bounds: CGRect(origin: point, size: .zero)))
         case .rectangle:
-            interaction = .creatingAnnotation(start: point, annotation: RectangleAnnotation(bounds: CGRect(origin: point, size: .zero), strokeColor: currentColor, strokeWidth: currentLineThickness))
+            interaction = .creatingAnnotation(start: point, annotation: RectangleAnnotation(bounds: CGRect(origin: point, size: .zero), strokeColor: currentColor, strokeWidth: drawingSize.lineThickness))
         case .ellipse:
-            interaction = .creatingAnnotation(start: point, annotation: EllipseAnnotation(bounds: CGRect(origin: point, size: .zero), strokeColor: currentColor, strokeWidth: currentLineThickness))
+            interaction = .creatingAnnotation(start: point, annotation: EllipseAnnotation(bounds: CGRect(origin: point, size: .zero), strokeColor: currentColor, strokeWidth: drawingSize.lineThickness))
         case .crop:
             interaction = .creatingCrop(start: point, rect: CGRect(origin: point, size: .zero))
         case .select:
@@ -403,19 +411,20 @@ final class AnnotationCanvasView: NSView {
         editor.onTextChanged = nil
         editor.onEditingEnded = nil
 
-        if let annotation = activeTextAnnotation {
-            let text = editor.text
-            if text != annotation.text {
-                recordActiveTextUndoIfNeeded()
-                annotation.text = text
-            }
-        }
+        updateActiveText()
         editor.removeFromSuperview()
         activeTextEditor = nil
         activeTextAnnotation = nil
         activeTextWasNew = false
         activeTextDidRecordUndo = false
         needsDisplay = true
+    }
+
+    private func updateActiveText() {
+        guard let editor = activeTextEditor, let annotation = activeTextAnnotation,
+              editor.text != annotation.text else { return }
+        recordActiveTextUndoIfNeeded()
+        annotation.text = editor.text
     }
 
     private func repositionActiveTextEditor() {
@@ -593,11 +602,33 @@ final class AnnotationCanvasView: NSView {
         }
     }
 
-    func applySelectedSize(lineThickness: CGFloat, textSize: CGFloat) {
-        currentLineThickness = lineThickness
-        currentTextSize = textSize
+    var selectedSizePreset: SizePreset? {
+        let thickness: CGFloat
+        switch state.annotation(with: state.selectedAnnotationID) {
+        case let text as TextAnnotation:
+            return SizePreset.allCases.first { $0.textSize == text.fontSize }
+        case let arrow as ArrowAnnotation: thickness = arrow.strokeWidth
+        case let rectangle as RectangleAnnotation: thickness = rectangle.strokeWidth
+        case let ellipse as EllipseAnnotation: thickness = ellipse.strokeWidth
+        case .none: return defaultSize
+        default: return nil
+        }
+        return SizePreset.allCases.first { $0.lineThickness == thickness }
+    }
+
+    var canChangeSize: Bool {
+        state.selectedTool != .blur && state.selectedTool != .crop
+            && !(state.annotation(with: state.selectedAnnotationID) is BlurAnnotation)
+    }
+
+    // A retained selection and the next annotation use the same displayed preset.
+    private var drawingSize: SizePreset { selectedSizePreset ?? defaultSize }
+
+    func applySelectedSize(_ preset: SizePreset) {
+        updateActiveText()
+        defaultSize = preset
         let selectedIsText = state.annotation(with: state.selectedAnnotationID) is TextAnnotation
-        let size = selectedIsText ? textSize : lineThickness
+        let size = selectedIsText ? preset.textSize : preset.lineThickness
         if state.applyThicknessToSelected(size) {
             repositionActiveTextEditor()
             if selectedIsText {

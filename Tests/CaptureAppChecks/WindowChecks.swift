@@ -53,6 +53,7 @@ enum WindowChecks {
         app.mainMenu = AppMenu.makeMenu()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             autoreleasepool {
+                runSizeChecks()
                 runAboutChecks(app: app)
                 runDuplicateChecks()
                 runTextBoundsChecks()
@@ -65,6 +66,124 @@ enum WindowChecks {
             exit(0)
         }
         app.run()
+    }
+
+    static func runSizeChecks() {
+        let state = AnnotationDocumentState()
+        let controller = MainWindowController(state: state)
+        let window = controller.window!
+        controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+        let canvas = canvas(in: window)
+        let control = window.toolbar!.items.first { $0.itemIdentifier.rawValue == "thickness" }!.view as! NSSegmentedControl
+        let image = NSImage(size: NSSize(width: 600, height: 400))
+        state.load(image: image)
+        canvas.zoomToFit()
+        precondition(control.selectedSegment == 2, "New windows start at M")
+        func selectTool(_ tool: Tool) {
+            controller.selectTool(NSToolbarItem(itemIdentifier: .init(tool.rawValue)))
+        }
+        func choose(_ index: Int) {
+            control.selectedSegment = index
+            controller.selectThickness(control)
+        }
+        func draw(_ tool: Tool, activateTool: Bool = true) -> Annotation {
+            if activateTool { selectTool(tool) }
+            let center = canvas.convert(NSPoint(x: canvas.bounds.midX, y: canvas.bounds.midY), to: nil)
+            func mouse(_ type: NSEvent.EventType, _ offset: CGFloat) -> NSEvent {
+                NSEvent.mouseEvent(with: type, location: CGPoint(x: center.x + offset, y: center.y + offset),
+                    modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                    context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            }
+            canvas.mouseDown(with: mouse(.leftMouseDown, -60))
+            if tool == .text {
+                let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+                editor.textView.insertText("Size check", replacementRange: NSRange(location: 0, length: 0))
+                canvas.commitTextEditing()
+            } else {
+                canvas.mouseDragged(with: mouse(.leftMouseDragged, 60))
+                canvas.mouseUp(with: mouse(.leftMouseUp, 60))
+            }
+            return state.annotations.last!
+        }
+        func size(_ annotation: Annotation) -> CGFloat {
+            switch annotation {
+            case let a as ArrowAnnotation: return a.strokeWidth
+            case let a as RectangleAnnotation: return a.strokeWidth
+            case let a as EllipseAnnotation: return a.strokeWidth
+            case let a as TextAnnotation: return a.fontSize
+            default: preconditionFailure("Unexpected annotation")
+            }
+        }
+        precondition(size(draw(.arrow)) == 16, "Initial M must draw M without clicking Size")
+        for tool in [Tool.arrow, .rectangle, .ellipse, .text] {
+            let expectedSizes: [CGFloat] = tool == .text ? [32, 40, 52, 64, 82] : [4, 12, 16, 24, 32]
+            for (index, expected) in expectedSizes.enumerated() {
+                selectTool(tool)
+                choose(index)
+                let annotation = draw(tool)
+                precondition(size(annotation) == CGFloat(expected))
+                precondition(control.selectedSegment == index)
+                selectTool(.select)
+                let otherIndex = (index + 1) % 5
+                choose(otherIndex)
+                precondition(control.selectedSegment == otherIndex)
+                controller.undo(nil)
+                precondition(control.selectedSegment == index)
+                precondition(size(state.annotation(with: annotation.id)!) == CGFloat(expected))
+                controller.redo(nil)
+                precondition(control.selectedSegment == otherIndex)
+            }
+        }
+        selectTool(.select)
+        let small = ArrowAnnotation(start: CGPoint(x: 10, y: 10), end: CGPoint(x: 150, y: 10), strokeWidth: 12)
+        state.addAnnotation(small)
+        precondition(control.selectedSegment == 1, "Selecting an existing annotation must display its size")
+        let large = TextAnnotation(bounds: CGRect(x: 30, y: 80, width: 220, height: 80), text: "Large", fontSize: 64)
+        state.addAnnotation(large)
+        precondition(control.selectedSegment == 3)
+        state.selectedAnnotationID = small.id
+        precondition(control.selectedSegment == 1)
+        controller.duplicateSelected(nil)
+        precondition(control.selectedSegment == 1)
+        let custom = RectangleAnnotation(bounds: CGRect(x: 50, y: 50, width: 90, height: 90), strokeWidth: 9)
+        state.addAnnotation(custom)
+        precondition(control.selectedSegment == -1, "Custom sizes must not show an incorrect preset")
+        selectTool(.text)
+        precondition(state.selectedAnnotationID == nil)
+        choose(4)
+        precondition(custom.strokeWidth == 9, "Changing tools must not restyle the old selection")
+        precondition(size(draw(.text)) == 82)
+        for tool in [Tool.blur, .crop] {
+            selectTool(tool)
+            precondition(!control.isEnabled && control.selectedSegment == -1)
+        }
+        selectTool(.arrow)
+        precondition(control.isEnabled && control.selectedSegment == 4)
+        state.addAnnotation(small.copyAnnotation(id: UUID()))
+        precondition(control.selectedSegment == 1)
+        precondition(size(draw(.arrow, activateTool: false)) == 12, "Drawing with a retained selection must match the displayed size")
+        selectTool(.text)
+        let center = canvas.convert(CGPoint(x: canvas.bounds.midX, y: canvas.bounds.midY), to: nil)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: center, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+        editor.textView.insertText("Keep my text", replacementRange: NSRange(location: 0, length: 0))
+        choose(1)
+        let textID = state.selectedAnnotationID!
+        precondition((state.annotation(with: textID) as! TextAnnotation).fontSize == 40)
+        precondition(abs(editor.textView.font!.pointSize - 40 * CGFloat(canvas.zoomPercentage) / 100) < 0.5)
+        controller.undo(nil)
+        precondition(!canvas.isEditingText && control.selectedSegment == 4)
+        precondition((state.annotation(with: textID) as! TextAnnotation).text == "Keep my text", "Undoing a size change must preserve text being edited")
+        controller.redo(nil)
+        precondition(control.selectedSegment == 1)
+        let other = MainWindowController()
+        let otherControl = other.window!.toolbar!.items.first { $0.itemIdentifier.rawValue == "thickness" }!.view as! NSSegmentedControl
+        precondition(otherControl.selectedSegment == 2, "Canvas size defaults must be independent")
+        other.window!.close()
+        respondToAlerts([.alertSecondButtonReturn]) { window.performClose(nil) }
+        print("PASS: all sizes for arrows, rectangles, ellipses and text; selection, undo/redo, tool changes and independent defaults")
     }
 
     static func runAboutChecks(app: NSApplication) {

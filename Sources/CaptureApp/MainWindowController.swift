@@ -6,6 +6,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private let state: AnnotationDocumentState
     private let canvasView: AnnotationCanvasView
     private let statusLabel = NSTextField(labelWithString: "Open, paste, or drop an image to start")
+    private weak var sizeControl: NSSegmentedControl?
     private var keyMonitor: Any?
     private var sourceURL: URL?
     private var sourceFormat: RasterImageFormat?
@@ -84,12 +85,17 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(state.selectedTool.rawValue)
         canvasView.toolSelectionHandler = { [weak self] tool in
             self?.window?.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(tool.rawValue)
+            self?.updateSizeControl()
         }
         installKeyMonitor()
         canvasView.statusHandler = { [weak self] text in self?.statusLabel.stringValue = text }
         canvasView.droppedFileHandler = { [weak self] url in self?.openDroppedFile(url) ?? false }
         canvasView.droppedImageHandler = { [weak self] image in self?.replaceWithImage(image, sourceURL: nil, message: "Dropped image") ?? false }
-        state.revisionDidChange = { [weak self] _ in self?.updateDocumentPresentation() }
+        state.selectionDidChange = { [weak self] in self?.updateSizeControl() }
+        state.revisionDidChange = { [weak self] _ in
+            self?.updateDocumentPresentation()
+            self?.updateSizeControl()
+        }
     }
 
     required init?(coder: NSCoder) { nil }
@@ -332,9 +338,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let item = NSToolbarItem(itemIdentifier: identifier)
         item.label = "Size"
         item.paletteLabel = "Size"
-        let control = NSSegmentedControl(labels: ["XS", "S", "M", "L", "XL"], trackingMode: .selectOne, target: self, action: #selector(selectThickness(_:)))
+        let control = NSSegmentedControl(labels: AnnotationCanvasView.SizePreset.allCases.map(\.label), trackingMode: .selectOne, target: self, action: #selector(selectThickness(_:)))
         control.frame = NSRect(x: 0, y: 0, width: 142, height: 28)
-        control.selectedSegment = 2
+        sizeControl = control
+        updateSizeControl()
         item.view = control
         item.minSize = NSSize(width: 142, height: 28)
         item.maxSize = NSSize(width: 152, height: 28)
@@ -374,15 +381,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         canvasView.applySelectedColor(CapturePalette.all[index].color)
     }
 
+    private func updateSizeControl() {
+        sizeControl?.isEnabled = canvasView.canChangeSize
+        sizeControl?.selectedSegment = canvasView.canChangeSize ? (canvasView.selectedSizePreset?.rawValue ?? -1) : -1
+    }
+
     @objc func selectThickness(_ sender: NSSegmentedControl) {
-        let lineThicknesses: [CGFloat] = [4, 12, 16, 24, 32]
-        let textSizes: [CGFloat] = [32, 40, 52, 64, 82]
-        let index = sender.selectedSegment
-        guard lineThicknesses.indices.contains(index), textSizes.indices.contains(index) else { return }
-        canvasView.applySelectedSize(lineThickness: lineThicknesses[index], textSize: textSizes[index])
+        guard let preset = AnnotationCanvasView.SizePreset(rawValue: sender.selectedSegment) else { return }
+        canvasView.applySelectedSize(preset)
+        updateSizeControl()
     }
 
     @objc func undo(_ sender: Any?) {
+        canvasView.commitTextEditing()
         canvasView.cancelInteraction()
         if state.undo() {
             canvasView.needsDisplay = true
@@ -393,6 +404,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @objc func redo(_ sender: Any?) {
+        canvasView.commitTextEditing()
         canvasView.cancelInteraction()
         if state.redo() {
             canvasView.needsDisplay = true
