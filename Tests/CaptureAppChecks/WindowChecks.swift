@@ -53,6 +53,7 @@ enum WindowChecks {
         app.mainMenu = AppMenu.makeMenu()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             autoreleasepool {
+                runShortcutChecks(app: app)
                 runSizeChecks()
                 runAboutChecks(app: app)
                 runDuplicateChecks()
@@ -66,6 +67,117 @@ enum WindowChecks {
             exit(0)
         }
         app.run()
+    }
+
+    static func runShortcutChecks(app: NSApplication) {
+        let state = AnnotationDocumentState()
+        let controller = MainWindowController(state: state)
+        let window = controller.window!
+        controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+        let identifiers = window.toolbar!.items.map { $0.itemIdentifier.rawValue }
+        let sizeIndex = identifiers.firstIndex(of: "thickness")!
+        precondition(Array(identifiers[sizeIndex...sizeIndex + 2]) == ["thickness", "color", "textBackground"])
+        let buttons = window.toolbar!.items.compactMap { $0.view as? ShortcutToolButton }
+        precondition(buttons.count == 17 && buttons.allSatisfy { !$0.showsShortcut })
+        func flags(_ modifiers: NSEvent.ModifierFlags, in target: NSWindow) {
+            app.sendEvent(NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: modifiers,
+                timestamp: 0, windowNumber: target.windowNumber, context: nil, characters: "",
+                charactersIgnoringModifiers: "", isARepeat: false, keyCode: 58)!)
+        }
+        func press(_ characters: String, code: UInt16, modifiers: NSEvent.ModifierFlags = .option, repeatKey: Bool = false) {
+            app.sendEvent(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers,
+                timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: characters,
+                charactersIgnoringModifiers: characters, isARepeat: repeatKey, keyCode: code)!)
+        }
+        let toolbarHeight = window.frame.height - window.contentLayoutRect.height
+        flags(.option, in: window)
+        precondition(buttons.allSatisfy { $0.showsShortcut })
+        window.layoutIfNeeded()
+        precondition(window.frame.height - window.contentLayoutRect.height == toolbarHeight, "Hints must not change toolbar height")
+        window.setContentSize(NSSize(width: 760, height: 520))
+        window.layoutIfNeeded()
+        for item in window.toolbar!.items where item.view is ShortcutToolButton {
+            precondition(item.menuFormRepresentation?.action == item.action, "Custom buttons need working overflow actions")
+            precondition((item.menuFormRepresentation?.target as? MainWindowController) === controller)
+        }
+        let overflowEllipse = window.toolbar!.items.first { $0.itemIdentifier.rawValue == "ellipse" }!.menuFormRepresentation!
+        precondition(app.sendAction(overflowEllipse.action!, to: overflowEllipse.target, from: overflowEllipse))
+        precondition(state.selectedTool == .ellipse && overflowEllipse.state == .on)
+        window.setContentSize(NSSize(width: 1120, height: 780))
+        for (tool, code, character) in [(Tool.arrow, UInt16(0), "å"), (.text, 17, "†"), (.ellipse, 14, "´"), (.rectangle, 15, "®"), (.blur, 11, "∫"), (.crop, 8, "ç")] {
+            press(character, code: code)
+            precondition(state.selectedTool == tool, "Option must use the base letter, not the resulting special character")
+            precondition(window.toolbar!.selectedItemIdentifier!.rawValue == tool.rawValue)
+            precondition(buttons.first { $0.identifier!.rawValue == tool.rawValue }!.state == .on)
+        }
+        press("a", code: 0, modifiers: [])
+        press("Å", code: 0, modifiers: [.option, .shift])
+        press("a", code: 0, modifiers: [.option, .command])
+        press("a", code: 0, modifiers: [.option, .control])
+        precondition(state.selectedTool == .crop, "Other modifiers must not trigger tool shortcuts")
+        let sizeView = window.toolbar!.items.first { $0.itemIdentifier.rawValue == "thickness" }!.view as! ShortcutSizeControl
+        precondition(sizeView.showsShortcuts && !sizeView.isEnabled)
+        precondition(sizeView.frame.height == 28, "Shortcut hints must preserve the original Size control height")
+        press("¡", code: 18)
+        precondition(!sizeView.isEnabled, "Size shortcuts must respect disabled tools")
+        let commandHints = ["select": "Esc", "open": "⌘O", "paste": "⇧⌘V", "save": "⌘S", "copy": "⇧⌘C", "export": "⌘E",
+                            "undo": "⌘Z", "redo": "⇧⌘Z", "zoomIn": "⌘=", "zoomOut": "⌘−", "zoomFit": "⌘0"]
+        for (identifier, hint) in commandHints {
+            precondition(buttons.first { $0.identifier!.rawValue == identifier }!.shortcut == hint)
+        }
+        press("å", code: 0)
+        for (index, code) in [UInt16(18), 19, 20, 21, 23].enumerated() {
+            press(String(index + 1), code: code)
+            precondition(sizeView.selectedSegment == index)
+        }
+        flags([], in: window)
+        precondition(buttons.allSatisfy { !$0.showsShortcut } && !sizeView.showsShortcuts)
+        let canvas = canvas(in: window)
+        precondition(canvas.droppedImageHandler!(NSImage(size: NSSize(width: 600, height: 400))))
+        press("†", code: 17)
+        let location = canvas.convert(CGPoint(x: canvas.bounds.midX, y: canvas.bounds.midY), to: nil)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: location, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+        editor.textView.insertText("Keep this annotation", replacementRange: NSRange(location: 0, length: 0))
+        press("™", code: 19)
+        precondition((state.annotations.first as! TextAnnotation).fontSize == 40)
+        precondition(canvas.isEditingText && sizeView.selectedSegment == 1)
+        press("†", code: 17, repeatKey: true)
+        precondition(canvas.isEditingText, "Key repeat must not interrupt an editor")
+        press("\u{1b}", code: 53, modifiers: [])
+        precondition(!canvas.isEditingText && state.selectedTool == .select)
+        let arrowButton = buttons.first { $0.identifier!.rawValue == "arrow" }!
+        arrowButton.performClick(nil)
+        precondition(state.selectedTool == .arrow && arrowButton.state == .on)
+        precondition((state.annotations.first as! TextAnnotation).text == "Keep this annotation")
+        let previousZoom = canvas.zoomPercentage
+        app.sendEvent(key("=", window: window))
+        precondition(canvas.zoomPercentage > previousZoom, "Zoom In must match its Command-= hint")
+        app.sendEvent(key("0", window: window))
+        press("†", code: 17)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: location, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        let nextEditor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+        nextEditor.textView.insertText("Option commits text", replacementRange: NSRange(location: 0, length: 0))
+        press("å", code: 0)
+        precondition(!canvas.isEditingText && (state.annotations.last as! TextAnnotation).text == "Option commits text")
+        flags(.option, in: window)
+        let otherState = AnnotationDocumentState()
+        let other = MainWindowController(state: otherState)
+        other.showWindow(nil)
+        other.window!.makeKeyAndOrderFront(nil)
+        precondition(buttons.allSatisfy { !$0.showsShortcut }, "Losing focus must clear hints")
+        press("†", code: 17)
+        precondition(state.selectedTool == .arrow && otherState.selectedTool == .select)
+        flags(.option, in: other.window!)
+        precondition(other.window!.toolbar!.items.compactMap { $0.view as? ShortcutToolButton }.allSatisfy { $0.showsShortcut })
+        precondition(buttons.allSatisfy { !$0.showsShortcut })
+        other.window!.close()
+        window.makeKeyAndOrderFront(nil)
+        respondToAlerts([.alertSecondButtonReturn]) { window.performClose(nil) }
+        print("PASS: Option tool shortcuts, special characters, text commit, repeat, hint release and window isolation")
     }
 
     static func runSizeChecks() {
