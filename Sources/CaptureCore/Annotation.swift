@@ -97,6 +97,47 @@ public final class ArrowAnnotation: Annotation {
     }
 }
 
+/// Shared TextKit metrics for the live editor and flattened output.
+public enum TextAnnotationLayout {
+    public static let horizontalInset: CGFloat = 10
+    public static let verticalInset: CGFloat = 6
+
+    public static func attributes(font: NSFont, color: NSColor) -> [NSAttributedString.Key: Any] {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.lineBreakMode = .byWordWrapping
+        return [.font: font, .foregroundColor: color, .paragraphStyle: paragraph]
+    }
+
+    public static func configure(_ container: NSTextContainer, width: CGFloat, scale: CGFloat = 1) {
+        container.lineFragmentPadding = 0
+        container.widthTracksTextView = false
+        container.containerSize = CGSize(width: max(1, width - horizontalInset * scale * 2),
+                                         height: .greatestFiniteMagnitude)
+        container.lineBreakMode = .byWordWrapping
+    }
+
+    public static func contentHeight(manager: NSLayoutManager, container: NSTextContainer, font: NSFont) -> CGFloat {
+        manager.ensureLayout(for: container)
+        return max(manager.defaultLineHeight(for: font), manager.usedRect(for: container).maxY,
+                   manager.extraLineFragmentRect.maxY)
+    }
+
+    public static func verticalOffset(height: CGFloat, contentHeight: CGFloat, scale: CGFloat = 1) -> CGFloat {
+        max(verticalInset * scale, (height - contentHeight) / 2)
+    }
+
+    public static func initialBounds(at point: CGPoint, canvas: CGRect, fontSize: CGFloat) -> CGRect {
+        let margin = min(20, min(canvas.width, canvas.height) / 4)
+        let available = canvas.insetBy(dx: margin, dy: margin)
+        let minimumWidth = min(260, available.width)
+        let x = min(max(point.x, available.minX), available.maxX - minimumWidth)
+        let manager = NSLayoutManager()
+        let height = max(76, manager.defaultLineHeight(for: .boldSystemFont(ofSize: fontSize)) + verticalInset * 2)
+        return CGRect(x: x, y: point.y, width: available.maxX - x, height: height).fitted(inside: available)
+    }
+}
+
 public final class TextAnnotation: Annotation {
     public let id: UUID
     public var bounds: CGRect
@@ -138,18 +179,25 @@ public final class TextAnnotation: Annotation {
     public func draw(in context: CGContext, baseImage: CGImage?, imageSize: CGSize, scale: CGFloat) {
         drawBackground(in: context)
 
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .center
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.boldSystemFont(ofSize: fontSize),
-            .foregroundColor: textColor,
-            .paragraphStyle: paragraph
-        ]
-        let textRect = bounds.insetBy(dx: 10, dy: 6)
+        let font = NSFont.boldSystemFont(ofSize: fontSize)
+        let storage = NSTextStorage(string: text, attributes: TextAnnotationLayout.attributes(font: font, color: textColor))
+        let manager = NSLayoutManager()
+        let container = NSTextContainer()
+        TextAnnotationLayout.configure(container, width: bounds.width)
+        manager.addTextContainer(container)
+        storage.addLayoutManager(manager)
+        let height = TextAnnotationLayout.contentHeight(manager: manager, container: container, font: font)
+        let origin = CGPoint(x: TextAnnotationLayout.horizontalInset,
+                             y: TextAnnotationLayout.verticalOffset(height: bounds.height, contentHeight: height))
+        context.saveGState()
+        context.clip(to: bounds)
+        context.translateBy(x: bounds.minX, y: bounds.maxY)
+        context.scaleBy(x: 1, y: -1)
         NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-        NSString(string: text).draw(in: textRect, withAttributes: attributes)
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        manager.drawGlyphs(forGlyphRange: manager.glyphRange(for: container), at: origin)
         NSGraphicsContext.restoreGraphicsState()
+        context.restoreGState()
     }
 
     public func hitTest(_ point: CGPoint) -> Bool {

@@ -58,6 +58,9 @@ enum WindowChecks {
                 runAboutChecks(app: app)
                 runDuplicateChecks()
                 runTextBoundsChecks()
+                runInPlaceTextChecks()
+                runWindowSizingChecks()
+                runCenteredRenderingChecks()
                 runTextClickAwayChecks()
                 runTextBackgroundChecks()
                 runChecks(app: app, delegate: delegate)
@@ -413,12 +416,13 @@ enum WindowChecks {
         let imageBounds = CGRect(origin: .zero, size: state.imageSize)
         precondition(imageBounds.contains(text.bounds), "Edge placement must fit inside the image")
         let originalWidth = text.bounds.width
+        let originalOrigin = text.bounds.origin
         let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
         let longText = String(repeating: "Long text wraps within this box. ", count: 15)
         editor.textView.insertText(longText, replacementRange: NSRange(location: 0, length: 0))
-        precondition(text.bounds.width == originalWidth && imageBounds.contains(text.bounds))
-        precondition(editor.hasOverflow && editor.text == longText, "Overflow must preserve all text")
-        let handle = NSPoint(x: editor.frame.maxX, y: editor.frame.maxY)
+        precondition(text.bounds.width == originalWidth && text.bounds.origin == originalOrigin)
+        precondition(!editor.hasOverflow && editor.text == longText && text.bounds.height > imageBounds.height, "Typing must grow beyond the image without losing text")
+        let handle = NSPoint(x: editor.frame.minX, y: editor.frame.minY)
         precondition(canvas.hitTest(handle) === canvas, "Editor must not intercept a resize handle")
         canvas.commitTextEditing()
         precondition(text.text == longText)
@@ -482,7 +486,169 @@ enum WindowChecks {
         precondition(small.frame.width == 60 && small.frame.height <= 40)
         precondition(small.textView.textContainerInset == CGSize(width: 5, height: 3))
         precondition(small.text == longText)
-        print("PASS: text wraps within image bounds, overflow retains text, off-image handles resize, undo restores bounds")
+        print("PASS: text grows beyond image bounds, overflow retains text, off-image handles resize, undo restores bounds")
+    }
+
+    static func runWindowSizingChecks() {
+        for screen in [CGRect(x: 0, y: 30, width: 2000, height: 1200),
+                       CGRect(x: -1800, y: 100, width: 1600, height: 1000),
+                       CGRect(x: 0, y: 0, width: 600, height: 400)] {
+            let frame = MainWindowController.initialWindowFrame(in: screen)
+            precondition(screen.contains(frame))
+            precondition(frame.midX == screen.midX && frame.midY == screen.midY)
+            precondition(frame.width == min(screen.width, max(760, screen.width * 0.7)))
+            precondition(frame.height == min(screen.height, max(520, screen.height * 0.7)))
+        }
+        let controller = MainWindowController()
+        if let screen = NSScreen.main {
+            let actual = controller.window!.frame
+            let expected = MainWindowController.initialWindowFrame(in: screen.visibleFrame)
+            precondition(abs(actual.width - expected.width) <= 1 && abs(actual.height - expected.height) <= 1,
+                         "Window frame should match 70% sizing within AppKit pixel rounding")
+        }
+        controller.window!.close()
+        print("PASS: window uses 70% of usable screen, centered and bounded on small/secondary screens")
+    }
+
+    static func runInPlaceTextChecks() {
+        let state = AnnotationDocumentState()
+        let canvas = AnnotationCanvasView(state: state)
+        let window = NSWindow(contentRect: CGRect(x: 100, y: 100, width: 1000, height: 800),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = canvas
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        let image = NSImage(size: CGSize(width: 400, height: 300), flipped: false) { rect in
+            NSColor.white.setFill(); rect.fill(); return true
+        }
+        for rect in [CGRect(x: -180, y: -100, width: 160, height: 90),
+                     CGRect(x: 450, y: 350, width: 200, height: 100),
+                     CGRect(x: -50, y: -40, width: 600, height: 400)] {
+            state.load(image: image)
+            let text = TextAnnotation(bounds: rect, text: "Centered", fontSize: 24, textColor: .red)
+            state.addAnnotation(text)
+            state.selectedTool = .select
+            canvas.toolDidChange()
+            canvas.zoomToFit()
+            canvas.resetZoom()
+            let revision = state.revisionID
+            let zoom = CGFloat(canvas.zoomPercentage) / 100
+            // These fixtures fit at 100%; the annotation center maps from expanded canvas space.
+            precondition(zoom == 1)
+            let point = CGPoint(x: canvas.bounds.midX + (rect.midX - state.canvasBounds.midX),
+                                y: canvas.bounds.midY + (rect.midY - state.canvasBounds.midY))
+            func edit() -> TextAnnotationEditorView {
+                canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown,
+                    location: canvas.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 2, pressure: 1)!)
+                return canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+            }
+            let editor = edit()
+            precondition(text.bounds == rect && state.revisionID == revision)
+            precondition(editor.frame.size == rect.size)
+            canvas.commitTextEditing()
+            precondition(text.bounds == rect && state.revisionID == revision)
+            let next = edit()
+            let longText = String(repeating: "More text wraps and grows. ", count: 30)
+            next.textView.insertText(longText, replacementRange: NSRange(location: 0, length: next.text.utf16.count))
+            precondition(text.bounds.origin == rect.origin && text.bounds.width == rect.width)
+            precondition(text.bounds.height > rect.height)
+            let grown = text.bounds
+            next.textView.insertText("Short", replacementRange: NSRange(location: 0, length: next.text.utf16.count))
+            precondition(text.bounds == grown, "Deleting text must not shrink the box")
+            canvas.commitTextEditing()
+            precondition(state.undo())
+            let restored = state.annotations[0] as! TextAnnotation
+            precondition(restored.bounds == rect && restored.text == "Centered")
+            precondition(state.redo())
+            precondition(state.annotations[0].bounds == grown && (state.annotations[0] as! TextAnnotation).text == "Short")
+        }
+        for scale: CGFloat in [0.5, 1, 2] {
+            let size = CGSize(width: 400 * scale, height: 200 * scale)
+            let editor = TextAnnotationEditorView(frame: CGRect(origin: .zero, size: size), text: "First line\nSecond line",
+                font: .boldSystemFont(ofSize: 24 * scale), textColor: .red, maximumSize: size, scale: scale)
+            let manager = editor.textView.layoutManager!
+            let height = TextAnnotationLayout.contentHeight(manager: manager, container: editor.textView.textContainer!, font: editor.textView.font!)
+            precondition(abs(editor.textView.textContainerInset.height + height / 2 - size.height / 2) < 0.01)
+            precondition(editor.textView.alignment == .center)
+        }
+        print("PASS: off-image/oversized text edits in place; no-op edit preserves revision; growth and undo; centered at multiple zooms")
+    }
+
+    static func runCenteredRenderingChecks() {
+        let state = AnnotationDocumentState()
+        let canvas = AnnotationCanvasView(state: state)
+        let window = NSWindow(contentRect: CGRect(x: 100, y: 100, width: 800, height: 600),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = canvas
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        let pixels = CGContext(data: nil, width: 600, height: 400, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        pixels.setFillColor(NSColor.white.cgColor)
+        pixels.fill(CGRect(x: 0, y: 0, width: 600, height: 400))
+        state.load(image: NSImage(cgImage: pixels.makeImage()!, size: CGSize(width: 600, height: 400)))
+        let rect = CGRect(x: 50, y: 80, width: 500, height: 240)
+        let text = TextAnnotation(bounds: rect, text: "Centered text\nSecond line", fontSize: 32, textColor: .red,
+                                  backgroundColor: .black.withAlphaComponent(0.5))
+        state.addAnnotation(text)
+        state.selectedTool = .select
+        canvas.toolDidChange()
+        canvas.zoomToFit()
+        canvas.resetZoom()
+        let directory = URL(fileURLWithPath: "artifacts/verification", isDirectory: true)
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        func snapshot(_ name: String) -> NSBitmapImageRep {
+            window.displayIfNeeded()
+            let bitmap = canvas.bitmapImageRepForCachingDisplay(in: canvas.bounds)!
+            canvas.cacheDisplay(in: canvas.bounds, to: bitmap)
+            try! bitmap.representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent(name))
+            return bitmap
+        }
+        func redBounds(_ bitmap: NSBitmapImageRep) -> CGRect {
+            var result = CGRect.null
+            precondition(bitmap.bitsPerSample == 8 && !bitmap.isPlanar && bitmap.samplesPerPixel >= 3)
+            let data = bitmap.bitmapData!
+            let colorOffset = bitmap.bitmapFormat.contains(.alphaFirst) ? 1 : 0
+            for y in 0..<bitmap.pixelsHigh {
+                for x in 0..<bitmap.pixelsWide {
+                    let offset = y * bitmap.bytesPerRow + x * bitmap.samplesPerPixel + colorOffset
+                    if data[offset] > 153 && data[offset + 1] < 77 && data[offset + 2] < 77 {
+                        result = result.union(CGRect(x: x, y: y, width: 1, height: 1))
+                    }
+                }
+            }
+            precondition(!result.isNull, "Text must render visible red glyphs")
+            return result
+        }
+        for step in 0..<3 {
+            let point = CGPoint(x: canvas.bounds.midX, y: canvas.bounds.midY)
+            canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: canvas.convert(point, to: nil),
+                modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                eventNumber: 0, clickCount: 2, pressure: 1)!)
+            precondition(canvas.isEditingText)
+            let editing = snapshot("centered-text-editing-\(step).png")
+            let before = redBounds(editing)
+            canvas.commitTextEditing()
+            let after = redBounds(snapshot("centered-text-committed-\(step).png"))
+            precondition(abs(before.midX - after.midX) <= 2 && abs(before.midY - after.midY) <= 2,
+                         "Editor and committed glyph positions must match")
+            precondition(abs(before.width - after.width) <= 3 && abs(before.height - after.height) <= 3,
+                         "Editor and committed wrapping must match")
+            precondition(abs(after.midX - CGFloat(editing.pixelsWide) / 2) <= 4,
+                         "Text must be horizontally centered")
+            precondition(abs(after.midY - CGFloat(editing.pixelsHigh) / 2) <= 20,
+                         "Text block must be vertically centered, allowing font ascender/descender metrics")
+            precondition(text.bounds == rect)
+            canvas.zoomOut()
+        }
+        let output = NSBitmapImageRep(cgImage: state.flattenedImage()!.cgImageForRendering()!)
+        try! output.representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent("centered-text-export.png"))
+        let exported = redBounds(output)
+        precondition(abs(exported.midX - 300) <= 2 && abs(exported.midY - 200) <= 10)
+        print("PASS: editing, committed and exported centered text match at 100%, 80%, 64% zoom")
     }
 
     static func runTextClickAwayChecks() {

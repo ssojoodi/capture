@@ -72,7 +72,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         ]
     }
 
-    init(state: AnnotationDocumentState = AnnotationDocumentState()) {
+    static func initialWindowFrame(in visibleFrame: CGRect) -> CGRect {
+        let size = CGSize(width: min(visibleFrame.width, max(760, visibleFrame.width * 0.7)),
+                          height: min(visibleFrame.height, max(520, visibleFrame.height * 0.7)))
+        return CGRect(x: visibleFrame.midX - size.width / 2, y: visibleFrame.midY - size.height / 2,
+                      width: size.width, height: size.height)
+    }
+
+    init(state: AnnotationDocumentState = AnnotationDocumentState(), screen: NSScreen? = NSScreen.main) {
         self.state = state
         canvasView = AnnotationCanvasView(state: state)
         let window = NSWindow(
@@ -86,11 +93,16 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.appearance = NSAppearance(named: .aqua)
         window.toolbarStyle = .expanded
         window.titleVisibility = .visible
-        window.minSize = NSSize(width: 760, height: 520)
+        let visibleFrame = screen?.visibleFrame
+        window.minSize = NSSize(width: min(760, visibleFrame?.width ?? 760),
+                                height: min(520, visibleFrame?.height ?? 520))
         super.init(window: window)
         window.delegate = self
         window.contentView = makeContentView()
         window.toolbar = makeToolbar()
+        if let visibleFrame {
+            window.setFrame(Self.initialWindowFrame(in: visibleFrame), display: false)
+        }
         window.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(state.selectedTool.rawValue)
         canvasView.toolSelectionHandler = { [weak self] tool in
             self?.window?.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(tool.rawValue)

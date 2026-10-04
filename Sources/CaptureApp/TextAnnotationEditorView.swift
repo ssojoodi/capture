@@ -1,11 +1,7 @@
 import AppKit
+import CaptureCore
 
 final class TextAnnotationEditorView: NSScrollView, NSTextViewDelegate {
-    private enum Layout {
-        static let horizontalInset: CGFloat = 10
-        static let verticalInset: CGFloat = 6
-        static let measurementPadding: CGFloat = 2
-    }
 
     let textView: NSTextView
     var onTextChanged: ((String, CGSize) -> Void)?
@@ -46,7 +42,7 @@ final class TextAnnotationEditorView: NSScrollView, NSTextViewDelegate {
             textColor: textColor
         )
         documentView = textView
-        resizeToFitContent()
+        layoutText(grow: false)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -78,43 +74,39 @@ final class TextAnnotationEditorView: NSScrollView, NSTextViewDelegate {
         self.scale = scale
         textView.font = font
         textView.textColor = textColor
-        resizeToFitContent()
+        layoutText(grow: false)
     }
 
     @discardableResult
-    func resizeToFitContent() -> CGSize {
-        let size = preferredContentSize()
+    private func layoutText(grow: Bool) -> CGSize {
+        guard let manager = textView.layoutManager, let container = textView.textContainer,
+              let font = textView.font else { return frame.size }
+        TextAnnotationLayout.configure(container, width: minimumContentSize.width, scale: scale)
+        let usedHeight = TextAnnotationLayout.contentHeight(manager: manager, container: container, font: font)
+        let requiredHeight = ceil(usedHeight + TextAnnotationLayout.verticalInset * scale * 2)
+        var size = minimumContentSize
+        if grow {
+            size.height = max(size.height, min(maximumContentSize.height, requiredHeight))
+            minimumContentSize = size
+        }
+        hasOverflow = requiredHeight > size.height
         setFrameSize(size)
-        let usedHeight = textView.layoutManager?.usedRect(for: textView.textContainer!).height ?? 0
-        textView.setFrameSize(CGSize(width: size.width, height: max(size.height, ceil(usedHeight + Layout.verticalInset * scale * 2))))
+        textView.textContainerInset = CGSize(
+            width: TextAnnotationLayout.horizontalInset * scale,
+            height: TextAnnotationLayout.verticalOffset(height: size.height, contentHeight: usedHeight, scale: scale))
+        textView.setFrameSize(CGSize(width: size.width, height: max(size.height, requiredHeight)))
+        if !hasOverflow { contentView.scroll(to: .zero) }
+        reflectScrolledClipView(contentView)
         return size
     }
 
-    func preferredContentSize() -> CGSize {
-        guard let layoutManager = textView.layoutManager, let textContainer = textView.textContainer else {
-            return minimumContentSize
-        }
-
-        let width = min(minimumContentSize.width, maximumContentSize.width)
-        textView.textContainerInset = CGSize(width: Layout.horizontalInset * scale, height: Layout.verticalInset * scale)
-        textContainer.containerSize = CGSize(width: max(1, width - Layout.horizontalInset * scale * 2), height: .greatestFiniteMagnitude)
-        layoutManager.ensureLayout(for: textContainer)
-        let usedRect = layoutManager.usedRect(for: textContainer)
-        let height = ceil(usedRect.height + (Layout.verticalInset * 2 + Layout.measurementPadding) * scale)
-        hasOverflow = height > maximumContentSize.height
-        return CGSize(
-            width: width,
-            height: min(maximumContentSize.height, max(minimumContentSize.height, height))
-        )
-    }
-
     func textDidChange(_ notification: Notification) {
-        let size = resizeToFitContent()
+        let size = layoutText(grow: true)
         onTextChanged?(textView.string, size)
     }
 
     func textDidEndEditing(_ notification: Notification) {
-        onEditingEnded?(textView.string, preferredContentSize())
+        onEditingEnded?(textView.string, frame.size)
     }
 
     private func configureTextView(
@@ -122,11 +114,12 @@ final class TextAnnotationEditorView: NSScrollView, NSTextViewDelegate {
         font: NSFont,
         textColor: NSColor
     ) {
-        textView.string = text
+        textView.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: TextAnnotationLayout.attributes(font: font, color: textColor)))
         textView.font = font
         textView.textColor = textColor
         textView.drawsBackground = false
         textView.alignment = .center
+        textView.typingAttributes = TextAnnotationLayout.attributes(font: font, color: textColor)
         textView.delegate = self
         textView.isEditable = true
         textView.isSelectable = true
@@ -134,10 +127,10 @@ final class TextAnnotationEditorView: NSScrollView, NSTextViewDelegate {
         textView.importsGraphics = false
         textView.allowsUndo = true
         textView.isHorizontallyResizable = false
-        textView.isVerticallyResizable = true
+        textView.isVerticallyResizable = false
         textView.minSize = .zero
         textView.maxSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.textContainerInset = CGSize(width: Layout.horizontalInset, height: Layout.verticalInset)
+        textView.textContainerInset = CGSize(width: TextAnnotationLayout.horizontalInset, height: TextAnnotationLayout.verticalInset)
         textView.textContainer?.lineFragmentPadding = 0
         textView.textContainer?.widthTracksTextView = false
         textView.textContainer?.lineBreakMode = .byWordWrapping
