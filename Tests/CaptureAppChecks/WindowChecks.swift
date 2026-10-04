@@ -60,9 +60,14 @@ enum WindowChecks {
                 runTextBoundsChecks()
                 runInPlaceTextChecks()
                 runWindowSizingChecks()
+                runPNGOutputChecks()
+                runAnnotationCopyChecks(app: app)
                 runCenteredRenderingChecks()
                 runTextClickAwayChecks()
                 runTextBackgroundChecks()
+                if ProcessInfo.processInfo.environment["CAPTURE_RELEASE_SCREENSHOT"] == "1" {
+                    captureReleasePreview()
+                }
                 runChecks(app: app, delegate: delegate)
             }
             precondition(closedController == nil, "Closed canvas controller was retained")
@@ -304,8 +309,13 @@ enum WindowChecks {
     static func runAboutChecks(app: NSApplication) {
         let appURL = URL(fileURLWithPath: ".build/DerivedData/Build/Products/Debug/Capture.app")
         let info = Bundle(url: appURL)!.infoDictionary!
-        precondition(info["CFBundleShortVersionString"] as? String == "2026.9.27")
-        precondition(info["CFBundleVersion"] as? String == "1")
+        let configuration = try! String(contentsOfFile: "Config/Version.xcconfig", encoding: .utf8)
+        func versionSetting(_ name: String) -> String {
+            let line = configuration.split(separator: "\n").first { $0.hasPrefix(name + " =") }!
+            return line.split(separator: "=", maxSplits: 1)[1].trimmingCharacters(in: .whitespaces)
+        }
+        precondition(info["CFBundleShortVersionString"] as? String == versionSetting("MARKETING_VERSION"))
+        precondition(info["CFBundleVersion"] as? String == versionSetting("CURRENT_PROJECT_VERSION"))
         precondition(info["NSHumanReadableCopyright"] as? String == "© Sahand Sojoodi, 2026")
         let menu = app.mainMenu!.items[0].submenu!
         let about = menu.items[0]
@@ -574,6 +584,128 @@ enum WindowChecks {
             precondition(editor.textView.alignment == .center)
         }
         print("PASS: off-image/oversized text edits in place; no-op edit preserves revision; growth and undo; centered at multiple zooms")
+    }
+
+    static func captureReleasePreview() {
+        let pixels = CGContext(data: nil, width: 1000, height: 600, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        pixels.setFillColor(NSColor(srgbRed: 0.96, green: 0.97, blue: 0.98, alpha: 1).cgColor)
+        pixels.fill(CGRect(x: 0, y: 0, width: 1000, height: 600))
+        let state = AnnotationDocumentState()
+        state.load(image: NSImage(cgImage: pixels.makeImage()!, size: CGSize(width: 1000, height: 600)))
+        state.addAnnotation(TextAnnotation(bounds: CGRect(x: 55, y: 390, width: 890, height: 150),
+            text: "Copy an arrow. Paste it anywhere.", fontSize: 40,
+            textColor: NSColor(srgbRed: 0.06, green: 0.15, blue: 0.24, alpha: 1), drawsBackground: false))
+        state.addAnnotation(TextAnnotation(bounds: CGRect(x: 560, y: 145, width: 335, height: 145),
+            text: "Transparent PNG\nImage-matched JPEG", fontSize: 28,
+            textColor: NSColor(srgbRed: 0.06, green: 0.15, blue: 0.24, alpha: 1), drawsBackground: false))
+        state.addAnnotation(RectangleAnnotation(bounds: CGRect(x: 530, y: 110, width: 395, height: 210),
+            strokeColor: NSColor(srgbRed: 0.08, green: 0.48, blue: 0.62, alpha: 1), strokeWidth: 6))
+        state.addAnnotation(ArrowAnnotation(start: CGPoint(x: 130, y: 150), end: CGPoint(x: 460, y: 270),
+            color: CapturePalette.softRed, strokeWidth: 16))
+        state.selectedTool = .select
+        let controller = MainWindowController(state: state)
+        controller.showWindow(nil)
+        let window = controller.window!
+        window.makeKeyAndOrderFront(nil)
+        window.layoutIfNeeded()
+        canvas(in: window).zoomToFit()
+        window.displayIfNeeded()
+        let view = window.contentView!.superview!
+        let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let directory = URL(fileURLWithPath: "artifacts/verification", isDirectory: true)
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try! bitmap.representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent("release-2026-10-03.png"))
+        window.close()
+        print("PASS: generated public-safe release window preview")
+    }
+
+    static func runAnnotationCopyChecks(app: NSApplication) {
+        let state = AnnotationDocumentState()
+        let controller = MainWindowController(state: state)
+        let window = controller.window!
+        controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+        let canvas = canvas(in: window)
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally(); window.close() }
+        let copyItem = NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        let annotationItem = NSMenuItem(title: "Copy Annotation", action: #selector(MainWindowController.copySelectedAnnotation(_:)), keyEquivalent: "")
+        pasteboard.setString("Preserve clipboard", forType: .string)
+        let changeCount = pasteboard.changeCount
+        controller.copySelectedAnnotation(to: pasteboard)
+        precondition(pasteboard.changeCount == changeCount)
+        precondition(!controller.validateMenuItem(copyItem) && !controller.validateMenuItem(annotationItem))
+        state.load(image: NSImage(size: CGSize(width: 600, height: 400)))
+        let arrow = ArrowAnnotation(start: CGPoint(x: -80, y: 20), end: CGPoint(x: 140, y: 180), color: .red, strokeWidth: 16)
+        state.addAnnotation(arrow)
+        state.selectedTool = .select
+        window.makeFirstResponder(canvas)
+        precondition((app.target(forAction: #selector(NSText.copy(_:))) as? MainWindowController) === controller,
+                     "Canvas Copy must resolve to the active window controller")
+        precondition(controller.validateMenuItem(copyItem) && controller.validateMenuItem(annotationItem))
+        let revision = state.revisionID
+        controller.copySelectedAnnotation(to: pasteboard)
+        let png = pasteboard.data(forType: .png)!
+        precondition(NSImage(pasteboard: pasteboard) != nil, "Native image paste must recognize annotation PNG")
+        precondition(state.revisionID == revision && state.selectedAnnotationID == arrow.id)
+        let directory = URL(fileURLWithPath: "artifacts/verification", isDirectory: true)
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try! png.write(to: directory.appendingPathComponent("copied-arrow.png"))
+        canvas.zoomToFit()
+        canvas.zoomOut()
+        controller.copySelectedAnnotation(to: pasteboard)
+        precondition(pasteboard.data(forType: .png) == png, "Zoom must not change object copy resolution")
+
+        state.selectedTool = .text
+        canvas.toolDidChange()
+        let location = canvas.convert(CGPoint(x: canvas.bounds.midX, y: canvas.bounds.midY), to: nil)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: location, modifierFlags: [],
+            timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+        editor.textView.insertText("Copy only this text", replacementRange: NSRange(location: 0, length: 0))
+        editor.textView.setSelectedRange(NSRange(location: 0, length: 4))
+        precondition((app.target(forAction: #selector(NSText.copy(_:))) as? NSTextView) === editor.textView,
+                     "Normal Copy must still reach the text editor")
+        controller.copySelectedAnnotation(to: pasteboard)
+        precondition(!canvas.isEditingText)
+        precondition((state.annotation(with: state.selectedAnnotationID) as! TextAnnotation).text == "Copy only this text")
+        precondition(pasteboard.data(forType: .png) != nil)
+        let other = MainWindowController()
+        other.showWindow(nil)
+        other.window!.makeKeyAndOrderFront(nil)
+        other.window!.makeFirstResponder(self.canvas(in: other.window!))
+        precondition((app.target(forAction: #selector(NSText.copy(_:))) as? MainWindowController) === other)
+        precondition(!other.validateMenuItem(copyItem), "Copy must use the active window's selection")
+        other.window!.close()
+        print("PASS: selected annotation PNG, unchanged clipboard with no selection, text Copy routing, zoom independence and active window")
+    }
+
+    static func runPNGOutputChecks() {
+        let state = AnnotationDocumentState()
+        let context = CGContext(data: nil, width: 120, height: 80, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.setFillColor(NSColor(srgbRed: 0.94, green: 0.91, blue: 0.84, alpha: 1).cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: 70, height: 80))
+        state.load(image: NSImage(cgImage: context.makeImage()!, size: CGSize(width: 120, height: 80)))
+        let controller = MainWindowController(state: state)
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally(); controller.window!.close() }
+        controller.copyFlattenedImage(to: pasteboard)
+        let data = pasteboard.data(forType: .png)!
+        let bitmap = NSBitmapImageRep(data: data)!
+        precondition(bitmap.colorAt(x: 100, y: 40)!.alphaComponent == 0)
+        let panel = controller.makeExportPanel()
+        precondition(panel.nameFieldStringValue == "annotation.png")
+        precondition(panel.allowedContentTypes.map(\.identifier) == ["public.png", "public.jpeg"])
+        let exportItem = controller.window!.toolbar!.items.first { $0.itemIdentifier.rawValue == "export" }!
+        precondition(exportItem.label == "Export")
+        let directory = URL(fileURLWithPath: "artifacts/verification", isDirectory: true)
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try! data.write(to: directory.appendingPathComponent("transparent-output.png"))
+        try! state.jpegData()!.write(to: directory.appendingPathComponent("sampled-background-output.jpg"))
+        print("PASS: clipboard publishes transparent PNG; export defaults to PNG and allows JPEG")
     }
 
     static func runCenteredRenderingChecks() {

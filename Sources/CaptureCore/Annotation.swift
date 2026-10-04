@@ -11,6 +11,22 @@ public protocol Annotation: AnyObject {
 
 public extension Annotation {
     func copyAnnotation() -> Annotation { copyAnnotation(id: id) }
+
+    /// Includes the painted stroke and arrowhead, independently of the viewport.
+    var renderedBounds: CGRect {
+        let padding: CGFloat
+        switch self {
+        case let arrow as ArrowAnnotation:
+            padding = max(14, arrow.strokeWidth * 2.2) * 3.35 / 2 + 1
+        case let rectangle as RectangleAnnotation:
+            padding = rectangle.strokeWidth / 2 + 1
+        case let ellipse as EllipseAnnotation:
+            padding = ellipse.strokeWidth / 2 + 1
+        default:
+            padding = 0
+        }
+        return bounds.insetBy(dx: -padding, dy: -padding)
+    }
 }
 
 public final class ArrowAnnotation: Annotation {

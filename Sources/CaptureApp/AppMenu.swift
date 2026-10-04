@@ -27,12 +27,13 @@ enum AppMenu {
         let saveAsItem = fileMenu.addItem(withTitle: "Save As...", action: #selector(MainWindowController.saveAs(_:)), keyEquivalent: "s")
         saveAsItem.keyEquivalentModifierMask = [.command, .shift]
         fileMenu.addItem(NSMenuItem.separator())
-        fileMenu.addItem(withTitle: "Export JPG...", action: #selector(MainWindowController.exportJPG(_:)), keyEquivalent: "e")
+        fileMenu.addItem(withTitle: "Export...", action: #selector(MainWindowController.exportImage(_:)), keyEquivalent: "e")
         fileItem.submenu = fileMenu
 
         let editMenu = NSMenu(title: "Edit")
         editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Copy Annotation", action: #selector(MainWindowController.copySelectedAnnotation(_:)), keyEquivalent: "")
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(NSMenuItem.separator())
         let pasteItem = editMenu.addItem(withTitle: "Paste Image", action: #selector(MainWindowController.pasteImage(_:)), keyEquivalent: "v")

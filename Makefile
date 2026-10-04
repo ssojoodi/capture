@@ -10,11 +10,7 @@ DESTINATION ?= platform=macOS
 DERIVED_DATA ?= .build/DerivedData
 APP := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)/$(APP_NAME).app
 INSTALL_APP := /Applications/$(APP_NAME).app
-RELEASE_DIR ?= .build/release
-RELEASE_SOURCE_APP := $(DERIVED_DATA)/Build/Products/Release/$(APP_NAME).app
-VERSION ?= $(shell date +%Y.%m.%d.%H%M)
-DMG := $(RELEASE_DIR)/$(APP_NAME)-$(VERSION).dmg
-DMG_VOLUME_NAME := Capture
+RELEASE_SOURCE_APP := .build/release/DerivedData/Build/Products/Release/$(APP_NAME).app
 
 BRAND_DIR := Brand
 BRAND_BUILD_DIR := .build/BrandAssets
@@ -47,7 +43,7 @@ APP_ICON_SPECS := \
 
 .DEFAULT_GOAL := build
 
-.PHONY: assets build buildlocal clean help paths release run test uninstall
+.PHONY: assets build buildlocal clean help paths release check-release run test uninstall
 
 assets: $(LOGO_PNG) $(APP_ICON_PNG) $(DMG_BACKGROUND_PNG)
 	mkdir -p "$(APPICONSET_DIR)"
@@ -94,7 +90,7 @@ clean:
 		-derivedDataPath "$(DERIVED_DATA)"
 	rm -rf "$(BRAND_BUILD_DIR)"
 	rm -rf "$(DERIVED_DATA)"
-	rm -rf "$(RELEASE_DIR)"
+	rm -rf ".build/release"
 	rm -rf "$(SWIFT_MODULE_CACHE)"
 	rm -f $(APP_ICON_FILES)
 
@@ -113,35 +109,12 @@ uninstall:
 	rm -rf "$(INSTALL_APP)"
 
 release:
-	@if [ -z "$(strip $(SIGN_IDENTITY))" ]; then \
-		printf "SIGN_IDENTITY is required.\n"; \
-		printf "Example:\n"; \
-		printf "  cp release.env.example release.env\n"; \
-		printf "  security find-identity -v -p codesigning\n"; \
-		exit 1; \
-	fi
-	@if [ -z "$(strip $(NOTARY_PROFILE))" ]; then \
-		printf "NOTARY_PROFILE is required.\n"; \
-		printf "Create one with:\n"; \
-		printf "  xcrun notarytool store-credentials \"capture-notary\" --apple-id \"you@example.com\" --team-id \"TEAMID\" --password \"APP-SPECIFIC-PASSWORD\"\n"; \
-		printf "Then set NOTARY_PROFILE = capture-notary in release.env.\n"; \
-		exit 1; \
-	fi
-	$(MAKE) build CONFIGURATION=Release
-	codesign --force --deep --options runtime --timestamp --sign "$(SIGN_IDENTITY)" "$(RELEASE_SOURCE_APP)"
-	codesign --verify --deep --strict --verbose=2 "$(RELEASE_SOURCE_APP)"
-	"$(DMG_SCRIPT)" "$(RELEASE_SOURCE_APP)" "$(DMG)" "$(DMG_VOLUME_NAME)" "$(DMG_BACKGROUND_PNG)" "$(RELEASE_DIR)"
-	codesign --force --timestamp --sign "$(SIGN_IDENTITY)" "$(DMG)"
-	codesign --verify --verbose=2 "$(DMG)"
-	xcrun notarytool submit "$(DMG)" --keychain-profile "$(NOTARY_PROFILE)" --wait
-	xcrun stapler staple "$(DMG)"
-	xcrun stapler validate "$(DMG)"
-	spctl -a -t open --context context:primary-signature -v "$(DMG)"
-	@if [ -f "web-page/$(APP_NAME).dmg" ]; then \
-		mkdir -p "docs/dmg-backups"; \
-		mv "web-page/$(APP_NAME).dmg" "docs/dmg-backups/$(APP_NAME)-$$(date +%Y-%m-%d-%H-%M-%S).dmg"; \
-	fi
-	mv "$(DMG)" "web-page/$(APP_NAME).dmg"
+	python3 scripts/release.py --identity "$(SIGN_IDENTITY)" --profile "$(NOTARY_PROFILE)"
+
+check-release:
+	python3 scripts/check_release_workflow.py
+	python3 scripts/check_release_publication.py
+
 
 paths:
 	@printf "Built app: %s\n" "$(APP)"
@@ -161,10 +134,10 @@ help:
 	@printf "  make run         Build and open the app\n"
 	@printf "  make uninstall   Remove /Applications/Capture.app\n"
 	@printf "  make release     Build, validate, and move the DMG to web-page\n"
+	@printf "  make check-release  Test release workflow without credentials\n"
 	@printf "  make paths       Print important generated paths\n"
 	@printf "\nVariables:\n"
 	@printf "  CONFIGURATION=Debug|Release  Default: Debug\n"
 	@printf "  DERIVED_DATA=.build/DerivedData\n"
-	@printf "  VERSION=2026.07.05.2230     Default: current timestamp\n"
-	@printf "  RELEASE_DIR=.build/release\n"
+	@printf "  Version/build: edit Config/Version.xcconfig\n"
 	@printf "  RELEASE_ENV=release.env     Local ignored release config\n"

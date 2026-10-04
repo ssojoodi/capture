@@ -199,7 +199,7 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertEqual(pixel(10, 115), [255, 0, 0, 255])
         XCTAssertEqual(pixel(150, 5), [255, 0, 0, 255])
         XCTAssertEqual(pixel(70, 55), [0, 0, 255, 255])
-        XCTAssertEqual(pixel(5, 60), [255, 255, 255, 255])
+        XCTAssertEqual(pixel(5, 60)[3], 0)
         for format: RasterImageFormat in [.png, .jpeg] {
             let data = try XCTUnwrap(state.imageData(format: format))
             let decoded = try XCTUnwrap(NSBitmapImageRep(data: data))
@@ -332,6 +332,120 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(decoded.sampleColor(x: 40, y: 30)).alphaComponent, 0, accuracy: 0.001)
     }
 
+    func testIndividualAnnotationsCopyWithoutSourceOrOtherObjects() throws {
+        let objects: [Annotation] = [
+            ArrowAnnotation(start: CGPoint(x: -80, y: -50), end: CGPoint(x: 130, y: 90), color: .red, strokeWidth: 32),
+            ArrowAnnotation(start: CGPoint(x: 100, y: 50), end: CGPoint(x: -100, y: 50), color: .red),
+            ArrowAnnotation(start: CGPoint(x: 50, y: 100), end: CGPoint(x: 50, y: -100), color: .red),
+            RectangleAnnotation(bounds: CGRect(x: -20, y: -30, width: 140, height: 80), strokeColor: .red, strokeWidth: 32),
+            EllipseAnnotation(bounds: CGRect(x: 20, y: 30, width: 140, height: 80), strokeColor: .red, strokeWidth: 24),
+            TextAnnotation(bounds: CGRect(x: -100, y: -80, width: 240, height: 100), text: "Copy me", fontSize: 32,
+                           textColor: .red, drawsBackground: false),
+            TextAnnotation(bounds: CGRect(x: 400, y: 400, width: 240, height: 100), text: "Box", fontSize: 32,
+                           textColor: .red, backgroundColor: .red.withAlphaComponent(0.5))
+        ]
+        for object in objects {
+            let state = AnnotationDocumentState()
+            state.load(image: solidImage(width: 200, height: 150, color: .blue))
+            state.addAnnotation(RectangleAnnotation(bounds: CGRect(x: -100, y: -100, width: 500, height: 500), strokeColor: .blue, strokeWidth: 50))
+            state.addAnnotation(object)
+            let revision = state.revisionID
+            let originalBounds = object.bounds
+            let png = try XCTUnwrap(state.selectedAnnotationPNGData())
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: png))
+            let expected = object.renderedBounds.insetBy(dx: -1, dy: -1).integral
+            XCTAssertEqual(bitmap.pixelsWide, Int(expected.width))
+            XCTAssertEqual(bitmap.pixelsHigh, Int(expected.height))
+            XCTAssertTrue(bitmap.hasAlpha)
+            var painted = 0
+            for y in 0..<bitmap.pixelsHigh {
+                for x in 0..<bitmap.pixelsWide {
+                    var pixel = [UInt](repeating: 0, count: 4)
+                    bitmap.getPixel(&pixel, atX: x, y: y)
+                    if x == 0 || y == 0 || x == bitmap.pixelsWide - 1 || y == bitmap.pixelsHigh - 1 {
+                        XCTAssertEqual(pixel[3], 0, "Paint must not touch the output edge")
+                    }
+                    if pixel[3] > 0 {
+                        painted += 1
+                        XCTAssertEqual(pixel[2], 0, "Blue source and other annotations must not be copied")
+                    }
+                }
+            }
+            XCTAssertGreaterThan(painted, 20)
+            XCTAssertEqual(state.revisionID, revision)
+            XCTAssertEqual(state.selectedAnnotationID, object.id)
+            XCTAssertEqual(object.bounds, originalBounds)
+            XCTAssertTrue(state.undo())
+            XCTAssertEqual(state.annotations.count, 1, "Copy must not add undo history")
+        }
+    }
+
+    func testAnnotationCopyWithoutSelectionReturnsNoData() {
+        let state = AnnotationDocumentState()
+        XCTAssertFalse(state.canCopySelectedAnnotation)
+        XCTAssertNil(state.selectedAnnotationPNGData())
+        state.selectedAnnotationID = UUID()
+        XCTAssertNil(state.selectedAnnotationPNGData())
+    }
+
+    func testDefaultEncodingIsPNGAndExpandedRegionsRemainTransparent() throws {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 80, height: 60, color: .clear))
+        state.addAnnotation(TextAnnotation(bounds: CGRect(x: -30, y: -20, width: 20, height: 10),
+                                           text: "", backgroundColor: .red))
+        let data = try XCTUnwrap(state.imageData())
+        XCTAssertEqual(Array(data.prefix(8)), [137, 80, 78, 71, 13, 10, 26, 10])
+        let decoded = try XCTUnwrap(NSBitmapImageRep(data: data))
+        XCTAssertEqual(decoded.pixelsWide, 110)
+        XCTAssertEqual(decoded.pixelsHigh, 80)
+        XCTAssertEqual(try XCTUnwrap(decoded.colorAt(x: 5, y: 30)).alphaComponent, 0)
+        XCTAssertEqual(try XCTUnwrap(decoded.colorAt(x: 60, y: 30)).alphaComponent, 0)
+    }
+
+    func testJPEGBackgroundMatchesVisibleLightDarkAndTintedPixels() throws {
+        let colors = [NSColor(srgbRed: 0.92, green: 0.9, blue: 0.86, alpha: 1),
+                      NSColor(srgbRed: 0.08, green: 0.1, blue: 0.14, alpha: 1),
+                      NSColor(srgbRed: 0.2, green: 0.65, blue: 0.4, alpha: 0.5)]
+        for color in colors {
+            let context = CGContext(data: nil, width: 100, height: 100, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.setFillColor(color.cgColor)
+            context.fill(CGRect(x: 0, y: 0, width: 50, height: 100))
+            let state = AnnotationDocumentState()
+            state.load(image: NSImage(cgImage: context.makeImage()!, size: CGSize(width: 100, height: 100)))
+            let decoded = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(state.imageData(format: .jpeg))))
+            // Compare encoded sRGB samples directly; colorAt uses the display's calibrated RGB space.
+            var background = [UInt](repeating: 0, count: 4)
+            decoded.getPixel(&background, atX: 80, y: 50)
+            XCTAssertFalse(decoded.hasAlpha)
+            XCTAssertEqual(CGFloat(background[0]) / 255, color.redComponent, accuracy: 0.025)
+            XCTAssertEqual(CGFloat(background[1]) / 255, color.greenComponent, accuracy: 0.025)
+            XCTAssertEqual(CGFloat(background[2]) / 255, color.blueComponent, accuracy: 0.025)
+            let png = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(state.imageData())))
+            XCTAssertEqual(try XCTUnwrap(png.colorAt(x: 80, y: 50)).alphaComponent, 0)
+        }
+    }
+
+    func testAverageVisibleColorWeightsAlphaAndIgnoresEmptyPixels() throws {
+        let context = CGContext(data: nil, width: 40, height: 20, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.setFillColor(NSColor.red.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: 10, height: 20))
+        context.setFillColor(NSColor.blue.withAlphaComponent(0.5).cgColor)
+        context.fill(CGRect(x: 10, y: 0, width: 10, height: 20))
+        let average = try XCTUnwrap(NSColor(cgColor: ImageRenderer.averageVisibleColor(in: context.makeImage()!)))
+        XCTAssertEqual(average.redComponent, 2.0 / 3, accuracy: 0.01)
+        XCTAssertEqual(average.greenComponent, 0, accuracy: 0.01)
+        XCTAssertEqual(average.blueComponent, 1.0 / 3, accuracy: 0.01)
+        let empty = AnnotationDocumentState()
+        empty.load(image: solidImage(width: 30, height: 20, color: .clear))
+        let decoded = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(empty.jpegData())))
+        let white = try XCTUnwrap(decoded.colorAt(x: 15, y: 10)?.usingColorSpace(.sRGB))
+        XCTAssertEqual(white.redComponent, 1, accuracy: 0.01)
+        XCTAssertEqual(white.greenComponent, 1, accuracy: 0.01)
+        XCTAssertEqual(white.blueComponent, 1, accuracy: 0.01)
+    }
+
     func testJPEGEncodingProducesDecodableFlattenedImage() throws {
         let state = AnnotationDocumentState()
         state.load(image: solidImage(width: 96, height: 64, color: .systemBlue))
@@ -375,12 +489,17 @@ final class AnnotationCoreTests: XCTestCase {
         state.addAnnotation(BlurAnnotation(bounds: CGRect(x: 20, y: 20, width: 80, height: 80), radius: 18))
 
         let flattened = try XCTUnwrap(state.flattenedImage())
-        let blurredColor = try XCTUnwrap(flattened.sampleColor(x: 60, y: 60))
-        let expected = try XCTUnwrap(sourceColor.usingColorSpace(.sRGB))
-        XCTAssertEqual(blurredColor.redComponent, expected.redComponent, accuracy: 0.02)
-        XCTAssertEqual(blurredColor.greenComponent, expected.greenComponent, accuracy: 0.02)
-        XCTAssertEqual(blurredColor.blueComponent, expected.blueComponent, accuracy: 0.02)
-        XCTAssertEqual(blurredColor.alphaComponent, 1, accuracy: 0.001)
+        // Compare sRGB bitmap samples, not display-calibrated NSColor conversions.
+        let original = NSBitmapImageRep(cgImage: try XCTUnwrap(state.baseCGImage))
+        let rendered = NSBitmapImageRep(cgImage: try XCTUnwrap(flattened.cgImageForRendering()))
+        var expected = [UInt](repeating: 0, count: 4)
+        var actual = [UInt](repeating: 0, count: 4)
+        original.getPixel(&expected, atX: 60, y: 60)
+        rendered.getPixel(&actual, atX: 60, y: 60)
+        for channel in 0..<3 {
+            XCTAssertEqual(Double(actual[channel]) / 255, Double(expected[channel]) / 255, accuracy: 0.02)
+        }
+        XCTAssertEqual(actual[3], 255)
     }
 
     func testUndoRemovesMostRecentCommittedOperationAndRedoRestoresIt() {

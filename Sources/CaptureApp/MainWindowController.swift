@@ -55,8 +55,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             ToolbarSpec(identifier: ToolbarID.open, label: "Open", symbol: "folder", action: #selector(openImage(_:))),
             ToolbarSpec(identifier: ToolbarID.paste, label: "Paste", symbol: "doc.on.clipboard", action: #selector(pasteImage(_:))),
             ToolbarSpec(identifier: ToolbarID.save, label: "Save", symbol: "square.and.arrow.down", action: #selector(save(_:))),
-            ToolbarSpec(identifier: ToolbarID.copy, label: "Copy", symbol: "doc.on.doc", action: #selector(copyFlattenedImage(_:))),
-            ToolbarSpec(identifier: ToolbarID.export, label: "Export JPG", symbol: "square.and.arrow.down", action: #selector(exportJPG(_:))),
+            ToolbarSpec(identifier: ToolbarID.copy, label: "Copy Image", symbol: "doc.on.doc", action: #selector(copyFlattenedImage(_:))),
+            ToolbarSpec(identifier: ToolbarID.export, label: "Export", symbol: "square.and.arrow.down", action: #selector(exportImage(_:))),
             ToolbarSpec(identifier: ToolbarID.undo, label: "Undo", symbol: "arrow.uturn.backward", action: #selector(undo(_:))),
             ToolbarSpec(identifier: ToolbarID.redo, label: "Redo", symbol: "arrow.uturn.forward", action: #selector(redo(_:))),
             ToolbarSpec(identifier: ToolbarID.zoomIn, label: "Zoom In", symbol: "plus.magnifyingglass", action: #selector(zoomIn(_:))),
@@ -170,7 +170,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 case "o": self.openImage(nil); return nil
                 case "v" where hasShift: self.pasteImage(nil); return nil
                 case "c" where hasShift: self.copyFlattenedImage(nil); return nil
-                case "e": self.exportJPG(nil); return nil
+                case "e": self.exportImage(nil); return nil
                 case "s" where hasShift: self.saveAs(nil); return nil
                 case "s": self.save(nil); return nil
                 case "z":
@@ -514,15 +514,45 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
 
-    @objc func copyFlattenedImage(_ sender: Any?) {
+    // NSTextView handles Copy first when editing; otherwise the canvas copies its selection.
+    @objc func copy(_ sender: Any?) {
+        copySelectedAnnotation(sender)
+    }
+
+    @objc func copySelectedAnnotation(_ sender: Any?) {
+        copySelectedAnnotation(to: .general)
+    }
+
+    func copySelectedAnnotation(to pasteboard: NSPasteboard) {
+        guard state.canCopySelectedAnnotation else {
+            statusLabel.stringValue = "Select an annotation to copy"
+            return
+        }
         canvasView.commitTextEditing()
-        guard let image = state.flattenedImage() else {
+        guard let data = state.selectedAnnotationPNGData() else {
+            statusLabel.stringValue = "Could not copy the selected annotation"
+            return
+        }
+        pasteboard.clearContents()
+        if pasteboard.setData(data, forType: .png) {
+            statusLabel.stringValue = "Copied annotation as PNG"
+        } else {
+            statusLabel.stringValue = "Could not write annotation to clipboard"
+        }
+    }
+
+    @objc func copyFlattenedImage(_ sender: Any?) {
+        copyFlattenedImage(to: .general)
+    }
+
+    func copyFlattenedImage(to pasteboard: NSPasteboard) {
+        canvasView.commitTextEditing()
+        guard let data = state.imageData() else {
             statusLabel.stringValue = "Nothing to copy"
             return
         }
-        let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.writeObjects([image])
+        pasteboard.setData(data, forType: .png)
         statusLabel.stringValue = "Copied flattened image"
     }
 
@@ -534,23 +564,31 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         _ = saveAsCurrentImage()
     }
 
-    @objc func exportJPG(_ sender: Any?) {
+    @objc func exportImage(_ sender: Any?) {
         canvasView.commitTextEditing()
-        guard let data = state.jpegData() else {
+        guard state.hasImage else {
             statusLabel.stringValue = "Nothing to export"
             return
         }
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.jpeg]
-        panel.nameFieldStringValue = "annotation.jpg"
-        if panel.runModal() == .OK, let url = panel.url {
-            do {
-                try data.write(to: url)
-                statusLabel.stringValue = "Exported \(url.lastPathComponent)"
-            } catch {
-                statusLabel.stringValue = "Export failed: \(error.localizedDescription)"
-            }
+        let panel = makeExportPanel()
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let format = RasterImageFormat(url: url), let data = state.imageData(format: format) else {
+            statusLabel.stringValue = "Export failed: choose a PNG or JPEG filename"
+            return
         }
+        do {
+            try data.write(to: url, options: .atomic)
+            statusLabel.stringValue = "Exported \(url.lastPathComponent)"
+        } catch {
+            statusLabel.stringValue = "Export failed: \(error.localizedDescription)"
+        }
+    }
+
+    func makeExportPanel() -> NSSavePanel {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.png, .jpeg]
+        panel.nameFieldStringValue = suggestedSaveName(format: .png)
+        return panel
     }
 
     @objc func duplicateSelected(_ sender: Any?) {
@@ -562,6 +600,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(copy(_:)) || menuItem.action == #selector(copySelectedAnnotation(_:)) {
+            return state.canCopySelectedAnnotation
+        }
         if menuItem.action == #selector(duplicateSelected(_:)) {
             return state.annotation(with: state.selectedAnnotationID) != nil
         }
@@ -669,7 +710,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             return false
         }
 
-        let defaultFormat = sourceFormat ?? .png
+        let defaultFormat: RasterImageFormat = .png
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png, .jpeg]
         panel.nameFieldStringValue = suggestedSaveName(format: defaultFormat)
