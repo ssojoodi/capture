@@ -1,4 +1,5 @@
 import AppKit
+import CaptureCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowControllers: [MainWindowController] = []
@@ -10,7 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func newDocument(_ sender: Any?) {
         let previousWindow = NSApp.keyWindow ?? windowControllers.last?.window
-        let controller = MainWindowController()
+        let screen = previousWindow?.screen ?? NSScreen.main
+        let controller = MainWindowController(screen: screen)
         controller.onWindowClosed = { [weak self] closedController in
             self?.windowControllers.removeAll { $0 === closedController }
         }
@@ -18,6 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let previousWindow {
             let topLeft = NSPoint(x: previousWindow.frame.minX + 24, y: previousWindow.frame.maxY - 24)
             controller.window?.cascadeTopLeft(from: topLeft)
+            if let window = controller.window, let visibleFrame = screen?.visibleFrame {
+                window.setFrame(window.frame.fitted(inside: visibleFrame), display: false)
+            }
         }
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)

@@ -10,3 +10,5 @@ Keep each release's screenshots in its own dated directory, such as `2026-09-24/
 - Record the app bundle's measured disk usage in the screenshot caption for each release, rather than the compressed DMG size. The September 24 caption currently uses the existing July 6 download: `du -sk Capture.app` reported 1,088 KiB (about 1.1 MB). Update that figure when the matching release build is packaged.
 
 The September 27 caption uses the optimized Release build of Capture 2026.9.27 (build 1): `du -sk` reported 1,200 KiB (about 1.2 MB on disk) before signing. Recheck the caption after packaging if signing changes the rounded size.
+
+The October 3 screenshot shows Capture 2026.10.3 (build 2) with a selected arrow and centered text. It was generated from the AppKit release-preview fixture using `CAPTURE_RELEASE_SCREENSHOT=1 bash scripts/check_windows.sh`; the image contains only public sample content. The signed universal app measured 2,256 KiB with `du -sk` (about 2.3 MB on disk). Both website pages use this dated image for social previews.

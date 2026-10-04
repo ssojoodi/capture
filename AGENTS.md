@@ -10,7 +10,7 @@ Persistent product constraints:
 - Native Swift + AppKit.
 - Elegant light-mode UI.
 - Fast and minimal over feature-rich.
-- Core workflow: open or paste image, annotate quickly, crop if needed, copy flattened image or export JPG.
+- Core workflow: open or paste image, annotate quickly, crop if needed, copy flattened image or export PNG (or JPEG with an image-matched background).
 - No editable project file format unless explicitly planned later.
 - No screenshot capture feature unless explicitly planned later.
 
@@ -77,3 +77,11 @@ Expected goal milestones:
 - Copy/export should not be the first time an edit appears correct.
 - Toolbar and keyboard shortcuts should expose common actions without adding inspector complexity.
 - If behavior differs from Skitch, document why in the relevant iteration plan.
+
+## Release Configuration
+
+- Edit `Config/Version.xcconfig` for the date-based app version and integer build number.
+- Do not supply release versions through environment variables or `release.env`.
+- `make release` reads and verifies built bundle metadata, signs and notarizes an isolated local candidate, then writes the validated DMG, checksum, and release.json to `web-page/`.
+- Keep `release.env` limited to local signing identity and notarization Keychain profile.
+- Run `make check-release` when changing release orchestration. Website deployment is separate.

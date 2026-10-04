@@ -39,20 +39,7 @@ public final class AnnotationDocumentState {
     public var canvasBounds: CGRect {
         var result = CGRect(origin: .zero, size: imageSize)
         for annotation in annotations where !(annotation is BlurAnnotation) {
-            var extent = annotation.bounds
-            let padding: CGFloat
-            switch annotation {
-            case let arrow as ArrowAnnotation:
-                padding = max(14, arrow.strokeWidth * 2.2) * 3.35 / 2 + 1
-            case let rectangle as RectangleAnnotation:
-                padding = rectangle.strokeWidth / 2 + 1
-            case let ellipse as EllipseAnnotation:
-                padding = ellipse.strokeWidth / 2 + 1
-            default:
-                padding = 0
-            }
-            extent = extent.insetBy(dx: -padding, dy: -padding)
-            result = result.union(extent)
+            result = result.union(annotation.renderedBounds)
         }
         return result.integral
     }
@@ -321,17 +308,29 @@ private extension AnnotationDocumentState {
 // MARK: - Rendered output
 
 extension AnnotationDocumentState {
+    public var canCopySelectedAnnotation: Bool {
+        guard let selected = annotation(with: selectedAnnotationID) else { return false }
+        return !(selected is BlurAnnotation)
+    }
+
+    public func selectedAnnotationPNGData() -> Data? {
+        guard canCopySelectedAnnotation, let selected = annotation(with: selectedAnnotationID),
+              let image = ImageRenderer.renderAnnotation(selected) else { return nil }
+        return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+    }
+
     public func flattenedImage() -> NSImage? {
         guard hasImage else { return nil }
         return ImageRenderer.render(state: self)
     }
 
-    public func imageData(format: RasterImageFormat, jpegQuality: CGFloat = 0.9) -> Data? {
+    public func imageData(format: RasterImageFormat = .png, jpegQuality: CGFloat = 0.9) -> Data? {
         guard let image = flattenedImage(), let cgImage = image.cgImageForRendering() else { return nil }
         let rep = NSBitmapImageRep(cgImage: cgImage)
         switch format {
         case .jpeg:
-            return rep.representation(using: .jpeg, properties: [.compressionFactor: jpegQuality])
+            guard let opaque = ImageRenderer.opaqueJPEGImage(from: cgImage) else { return nil }
+            return NSBitmapImageRep(cgImage: opaque).representation(using: .jpeg, properties: [.compressionFactor: jpegQuality])
         case .png:
             return rep.representation(using: .png, properties: [:])
         }

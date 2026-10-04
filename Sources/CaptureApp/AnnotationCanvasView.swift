@@ -32,7 +32,6 @@ final class AnnotationCanvasView: NSView {
     private var textPlacementID: UUID?
     private var activeTextWasNew = false
     private var activeTextDidRecordUndo = false
-    private let defaultTextAnnotationSize = CGSize(width: 260, height: 76)
     var isEditingText: Bool { activeTextEditor != nil }
     var statusHandler: ((String) -> Void)?
     var toolSelectionHandler: ((Tool) -> Void)?
@@ -347,7 +346,7 @@ final class AnnotationCanvasView: NSView {
             interaction = .creatingAnnotation(start: point, annotation: ArrowAnnotation(start: point, end: point, color: currentColor, strokeWidth: drawingSize.lineThickness))
         case .text:
             let annotation = TextAnnotation(
-                bounds: CGRect(origin: point, size: defaultTextAnnotationSize).fitted(inside: CGRect(origin: .zero, size: state.imageSize)),
+                bounds: TextAnnotationLayout.initialBounds(at: rawPoint, canvas: state.canvasBounds, fontSize: drawingSize.textSize),
                 text: "",
                 fontSize: drawingSize.textSize,
                 textColor: currentColor,
@@ -374,16 +373,12 @@ final class AnnotationCanvasView: NSView {
 
     private func beginEditing(_ annotation: TextAnnotation, isNew: Bool = false) {
         activeTextEditor?.removeFromSuperview()
-        let fittedBounds = annotation.bounds.fitted(inside: CGRect(origin: .zero, size: state.imageSize))
-        let didFitBounds = fittedBounds != annotation.bounds
-        if didFitBounds && !isNew { state.recordUndoSnapshot() }
-        annotation.bounds = fittedBounds
         let editor = TextAnnotationEditorView(
             frame: viewRect(forImageRect: annotation.bounds),
             text: annotation.text,
             font: textEditorFont(for: annotation),
             textColor: annotation.textColor,
-            maximumSize: CGSize(width: state.imageSize.width * zoom, height: state.imageSize.height * zoom),
+            maximumSize: CGSize(width: annotation.bounds.width * zoom, height: .greatestFiniteMagnitude),
             scale: zoom
         )
         editor.resizeHandleHitTest = { [weak self] point in
@@ -401,8 +396,7 @@ final class AnnotationCanvasView: NSView {
         activeTextEditor = editor
         activeTextAnnotation = annotation
         activeTextWasNew = isNew
-        activeTextDidRecordUndo = didFitBounds && !isNew
-        resizeActiveTextAnnotation(toViewSize: editor.frame.size)
+        activeTextDidRecordUndo = false
         editor.focusAtEnd()
     }
 
@@ -433,24 +427,22 @@ final class AnnotationCanvasView: NSView {
             viewRect(forImageRect: annotation.bounds),
             font: textEditorFont(for: annotation),
             textColor: annotation.textColor,
-            maximumSize: CGSize(width: state.imageSize.width * zoom, height: state.imageSize.height * zoom),
+            maximumSize: CGSize(width: annotation.bounds.width * zoom, height: .greatestFiniteMagnitude),
             scale: zoom
         )
-        resizeActiveTextAnnotation(toViewSize: editor.frame.size)
     }
 
     private func resizeActiveTextAnnotation(toViewSize viewSize: CGSize) {
         guard let annotation = activeTextAnnotation else { return }
         let newSize = imageSize(forViewSize: viewSize)
-        let fittedBounds = CGRect(origin: annotation.bounds.origin, size: newSize)
-            .fitted(inside: CGRect(origin: .zero, size: state.imageSize))
-        if fittedBounds != annotation.bounds {
+        let updatedBounds = CGRect(origin: annotation.bounds.origin, size: newSize)
+        if updatedBounds != annotation.bounds {
             recordActiveTextUndoIfNeeded()
-            annotation.bounds = fittedBounds
+            annotation.bounds = updatedBounds
         }
         activeTextEditor?.setFrameOrigin(viewRect(forImageRect: annotation.bounds).origin)
         if activeTextEditor?.hasOverflow == true {
-            statusHandler?("Text exceeds image height; reduce text size or shorten the text")
+            statusHandler?("Text exceeds box height; resize the box to show all text")
         }
         needsDisplay = true
     }
@@ -482,11 +474,8 @@ final class AnnotationCanvasView: NSView {
                 state.recordUndoSnapshot()
                 interaction = .resizing(annotation: annotation, handle: handle, didRecordUndo: true)
             }
-            let resizePoint = state.selectedTool == .select ? rawPoint : point
+            let resizePoint = state.selectedTool == .select || annotation is TextAnnotation ? rawPoint : point
             if AnnotationSelectionGeometry.applyResize(annotation: annotation, handle: handle, to: resizePoint), annotation is TextAnnotation {
-                if state.selectedTool != .select {
-                    annotation.bounds = annotation.bounds.fitted(inside: CGRect(origin: .zero, size: state.imageSize))
-                }
                 repositionActiveTextEditor()
             }
         case let .moving(annotation, lastPoint, didRecordUndo):
@@ -495,9 +484,6 @@ final class AnnotationCanvasView: NSView {
                 interaction = .moving(annotation: annotation, lastPoint: lastPoint, didRecordUndo: true)
             }
             annotation.moveBy(dx: rawPoint.x - lastPoint.x, dy: rawPoint.y - lastPoint.y)
-            if annotation is TextAnnotation && state.selectedTool != .select {
-                annotation.bounds = annotation.bounds.fitted(inside: CGRect(origin: .zero, size: state.imageSize))
-            }
             interaction = .moving(annotation: annotation, lastPoint: rawPoint, didRecordUndo: true)
         case let .creatingAnnotation(start, annotation):
             let rect = CGRect(x: start.x, y: start.y, width: point.x - start.x, height: point.y - start.y).normalized

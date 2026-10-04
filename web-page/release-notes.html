@@ -4,10 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Release notes — Capture for macOS</title>
-    <meta name="description" content="What’s new in Capture. September 27, 2026: toolbar shortcuts with visible hints, annotation duplication, and corrected size selection." />
-    <meta property="og:title" content="Release notes — Capture for macOS" />
-    <meta property="og:description" content="September 27, 2026: toolbar shortcuts, annotation duplication, size selection fixes, and About Capture." />
+    <meta name="description" content="What’s new in Capture for macOS. Version 2026.10.3 adds transparent PNG output, individual annotation copying, and improved text boxes." />
+    <link rel="canonical" href="https://sojoodi.com/apps/Capture/release-notes.html" />
+    <meta property="og:url" content="https://sojoodi.com/apps/Capture/release-notes.html" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Capture" />
+    <meta property="og:title" content="Release notes — Capture for macOS" />
+    <meta property="og:description" content="What’s new in Capture for macOS. Version 2026.10.3 adds transparent PNG output, individual annotation copying, and improved text boxes." />
+    <meta property="og:image" content="https://sojoodi.com/apps/Capture/releases/2026-10-03/capture.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="2520" />
+    <meta property="og:image:height" content="1474" />
+    <meta property="og:image:alt" content="Capture for macOS with a selected arrow, centered text, and transparent PNG and image-matched JPEG sharing." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Release notes — Capture for macOS" />
+    <meta name="twitter:description" content="What’s new in Capture for macOS. Version 2026.10.3 adds transparent PNG output, individual annotation copying, and improved text boxes." />
+    <meta name="twitter:image" content="https://sojoodi.com/apps/Capture/releases/2026-10-03/capture.png" />
+    <meta name="twitter:image:alt" content="Capture for macOS with a selected arrow, centered text, and transparent PNG and image-matched JPEG sharing." />
     <meta name="theme-color" content="#f8fbfd" />
     <link rel="icon" href="app-icon.svg" />
     <link rel="apple-touch-icon" href="app-icon.svg" />
@@ -142,9 +155,45 @@
       </div>
 
       <!-- Add future releases above this article. Keep each dated screenshot unchanged to preserve the visual history. -->
-      <article class="release" id="2026-09-27" aria-labelledby="release-title-2026-09-27">
+      <article class="release" id="2026-10-03" aria-labelledby="release-title-2026-10-03">
         <div class="release-meta">
           <span class="latest">Latest update</span>
+          <time class="release-date" datetime="2026-10-03">October 3, 2026</time>
+          <p class="platform">Capture 2026.10.3 · macOS</p>
+          <a class="permalink" href="#2026-10-03" aria-label="Link to the October 3, 2026 release">Link to this release ↗</a>
+        </div>
+        <div class="release-content">
+          <h2 id="release-title-2026-10-03">Transparent sharing and better text boxes</h2>
+          <p class="release-intro">Copy individual annotations into other apps, preserve transparency, and edit text boxes where you place them.</p>
+          <figure class="release-screenshot">
+            <a href="releases/2026-10-03/capture.png" aria-label="View the full-size Capture screenshot from October 3, 2026">
+              <img src="releases/2026-10-03/capture.png" alt="Capture for macOS with a selected arrow, centered text, and transparent PNG and image-matched JPEG sharing." width="2520" height="1474" />
+            </a>
+            <figcaption>Capture 2026.10.3 · October 3, 2026 · Selected arrow ready to copy as a transparent PNG. <a href="releases/2026-10-03/capture.png">View full size</a>; App size: 2.3 MB on disk (Apple silicon and Intel)</figcaption>
+          </figure>
+          <section class="change" aria-labelledby="transparent-sharing">
+            <div class="change-heading"><span class="number" aria-hidden="true">01</span><h3 id="transparent-sharing">Copy and export</h3></div>
+            <ul>
+              <li><strong>Copy a selected annotation with Command-C.</strong> Arrows, shapes, and text boxes copy as transparent PNG images for pasting into apps such as Keynote. Edit → Copy Annotation does the same. Pasted objects are images, not native editable shapes.</li>
+              <li><strong>Keep full-image and text copying.</strong> Shift-Command-C and Copy Image copy the full canvas. Command-C still copies selected text while editing.</li>
+              <li><strong>PNG is the default.</strong> Copy Image, Export, and Save As preserve transparency, including empty areas beyond the original image.</li>
+              <li><strong>JPEG backgrounds match the image.</strong> When saving as JPEG, transparent areas use the average visible image color instead of black. Save retains an existing file’s format.</li>
+            </ul>
+          </section>
+          <section class="change" aria-labelledby="centered-text-boxes">
+            <div class="change-heading"><span class="number" aria-hidden="true">02</span><h3 id="centered-text-boxes">Text and window sizing</h3></div>
+            <ul>
+              <li><strong>Centered text.</strong> Text is centered horizontally and vertically while editing and in the final image.</li>
+              <li><strong>Wider starting boxes.</strong> New text boxes extend toward the canvas’s right edge. Their height grows as text wraps, and you can resize them manually.</li>
+              <li><strong>Edit outside the original image.</strong> Double-click a moved text box to edit it in place without snapping back inside the image.</li>
+              <li><strong>More room on launch.</strong> New windows use 70% of the screen’s usable width and height, subject to the minimum window size.</li>
+            </ul>
+          </section>
+        </div>
+      </article>
+
+      <article class="release" id="2026-09-27" aria-labelledby="release-title-2026-09-27">
+        <div class="release-meta">
           <time class="release-date" datetime="2026-09-27">September 27, 2026</time>
           <p class="platform">Capture 2026.9.27 · macOS</p>
           <a class="permalink" href="#2026-09-27" aria-label="Link to the September 27, 2026 release">Link to this release ↗</a>
