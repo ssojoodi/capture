@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <title>Capture — fast image annotation for macOS</title>
+  <rect width="1200" height="630" fill="#eef8fe"/>
+  <rect x="40" y="40" width="1120" height="550" rx="32" fill="white" stroke="#aee2fb" stroke-width="2"/>
+  <g fill="none" stroke="#075985" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M940 225 L1060 105 M990 105 H1060 V175"/>
+  </g>
+  <g font-family="Arial, sans-serif" fill="#102033">
+    <text x="96" y="155" font-size="38" font-weight="bold" fill="#075985">Capture</text>
+    <text x="96" y="274" font-size="66" font-weight="bold">Fast image annotation.</text>
+    <text x="96" y="358" font-size="66" font-weight="bold">Native to macOS.</text>
+    <text x="96" y="450" font-size="30" fill="#536b7d">Arrows · Text · Blur · Crop · Copy · Export</text>
+    <text x="96" y="533" font-size="24" fill="#075985">sojoodi.com/apps/Capture</text>
+  </g>
+</svg>

@@ -11,25 +11,35 @@
     <meta property="og:site_name" content="Capture" />
     <meta property="og:title" content="Capture — Fast image annotation for macOS" />
     <meta property="og:description" content="Annotate screenshots with arrows, text, shapes, blur, and crop. Copy individual annotations into other apps or export transparent PNGs with Capture for macOS." />
-    <meta property="og:image" content="https://sojoodi.com/apps/Capture/releases/2026-10-03/capture.png" />
+    <meta property="og:image" content="https://sojoodi.com/apps/Capture/assets/social-preview.png" />
     <meta property="og:image:type" content="image/png" />
-    <meta property="og:image:width" content="2520" />
-    <meta property="og:image:height" content="1474" />
-    <meta property="og:image:alt" content="Capture for macOS with a selected arrow, centered text, and transparent PNG and image-matched JPEG sharing." />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Capture — fast image annotation for macOS. Arrows, text, blur, crop, copy and export." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Capture — Fast image annotation for macOS" />
     <meta name="twitter:description" content="Annotate screenshots with arrows, text, shapes, blur, and crop. Copy individual annotations into other apps or export transparent PNGs with Capture for macOS." />
-    <meta name="twitter:image" content="https://sojoodi.com/apps/Capture/releases/2026-10-03/capture.png" />
-    <meta name="twitter:image:alt" content="Capture for macOS with a selected arrow, centered text, and transparent PNG and image-matched JPEG sharing." />
+    <meta name="twitter:image" content="https://sojoodi.com/apps/Capture/assets/social-preview.png" />
+    <meta name="twitter:image:alt" content="Capture — fast image annotation for macOS. Arrows, text, blur, crop, copy and export." />
     <meta name="theme-color" content="#f8fbfd" />
-    <link rel="icon" href="app-icon.svg" />
-    <link rel="apple-touch-icon" href="app-icon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap"
-      rel="stylesheet"
-    />
+    <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="app-icon.svg" type="image/svg+xml" sizes="any" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" sizes="180x180" />
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "@id": "https://sojoodi.com/apps/Capture/#app",
+  "name": "Capture",
+  "url": "https://sojoodi.com/apps/Capture/",
+  "description": "Annotate screenshots with arrows, text, shapes, blur, and crop. Copy individual annotations into other apps or export transparent PNGs with Capture for macOS.",
+  "image": "https://sojoodi.com/apps/Capture/assets/social-preview.png",
+  "operatingSystem": "macOS",
+  "applicationCategory": "MultimediaApplication",
+  "downloadUrl": "https://sojoodi.com/apps/Capture/Capture.dmg",
+  "releaseNotes": "https://sojoodi.com/apps/Capture/release-notes.html"
+}
+    </script>
     <style>
       :root {
         --page: #f8fbfd;
@@ -41,12 +51,12 @@
         --blue-deep: #075985;
         --ink: #102033;
         --muted: #607386;
-        --faint: #91a4b5;
+        --faint: #607386;
         --line: #dbeaf2;
         --shadow: 0 30px 80px rgba(7, 89, 133, 0.14);
         --soft-shadow: 0 16px 42px rgba(7, 89, 133, 0.08);
-        --font: "Instrument Sans", "Avenir Next", sans-serif;
-        --mono: "IBM Plex Mono", monospace;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
 
       * {
@@ -169,9 +179,11 @@
 
       .button-primary {
         color: white;
-        background: var(--blue);
+        background: var(--blue-deep);
         box-shadow: 0 14px 32px rgba(14, 165, 233, 0.24);
       }
+
+      .nav-links .button-primary, .nav-links .button-primary:hover { color: white; }
 
       .button-secondary {
         color: var(--blue-deep);
@@ -212,7 +224,7 @@
       }
 
       h1 span {
-        color: var(--blue);
+        color: var(--blue-deep);
       }
 
       .subhead {
@@ -358,7 +370,7 @@
         width: 34px;
         height: 34px;
         margin-bottom: 23px;
-        color: var(--blue);
+        color: var(--blue-deep);
       }
 
       .feature-card h3 {
@@ -402,7 +414,7 @@
         margin-bottom: 18px;
         border-radius: 50%;
         color: white;
-        background: var(--blue);
+        background: var(--blue-deep);
         font-family: var(--mono);
         font-size: 13px;
         font-weight: 600;
@@ -491,9 +503,8 @@
           width: min(100% - 30px, 1120px);
         }
 
-        .nav-links a:not(.button) {
-          display: none;
-        }
+        .nav-inner { flex-wrap: wrap; gap: 10px; }
+        .nav-links { flex-wrap: wrap; gap: 8px 16px; }
 
         .hero {
           padding-top: 54px;
@@ -525,9 +536,23 @@
           grid-template-columns: 1fr;
         }
       }
+
+      :root { color-scheme: light; }
+      a:focus-visible { outline: 3px solid #075985; outline-offset: 4px; }
+      .skip { position: absolute; top: -100px; left: 16px; z-index: 100; padding: 12px 16px; color: #075985; background: white; }
+      .skip:focus { top: 12px; }
+      [id] { scroll-margin-top: 140px; }
+      .nav-links a { display: inline-flex; align-items: center; min-height: 44px; }
+      .nav-inner, .nav-links { flex-wrap: wrap; }
+      .legal a:hover { text-decoration: underline; }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        *, *::before, *::after { transition: none !important; }
+      }
     </style>
   </head>
   <body>
+    <a class="skip" href="#top">Skip to content</a>
     <header class="nav">
       <div class="wrap nav-inner">
         <a class="brand" href="#top" aria-label="Capture home">
@@ -545,7 +570,7 @@
       </div>
     </header>
 
-    <main id="top">
+    <main id="top" tabindex="-1">
       <section class="hero">
         <div class="wrap">
           <img
@@ -580,7 +605,7 @@
           <div class="showcase">
             <figure class="canvas-card">
               <img
-                src="releases/2026-10-03/capture.png"
+                src="assets/capture-2026-10-03-1280.webp" srcset="assets/capture-2026-10-03-640.webp 640w, assets/capture-2026-10-03-1280.webp 1280w" sizes="(max-width: 680px) calc(100vw - 32px), (max-width: 1024px) calc(100vw - 44px), 980px" decoding="async" fetchpriority="high"
                 alt="Capture for macOS with a selected arrow, centered text, and transparent PNG and image-matched JPEG sharing."
                 width="2520"
                 height="1474"
@@ -736,7 +761,7 @@
     </main>
 
     <footer class="legal wrap">
-      Copyright © 2026 Sahand Sojoodi · <a href="release-notes.html">Release notes</a> · <a href="#top">Back to top</a>
+      Copyright © 2026 <a href="https://sojoodi.com/">Sahand Sojoodi</a> · <a href="https://sojoodi.com/apps/">All apps</a> · <a href="release-notes.html">Release notes</a> · <a href="#top">Back to top</a>
     </footer>
 
     <!-- Google tag (gtag.js) -->
