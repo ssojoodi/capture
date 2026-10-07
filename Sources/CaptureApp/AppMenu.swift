@@ -28,6 +28,7 @@ enum AppMenu {
         saveAsItem.keyEquivalentModifierMask = [.command, .shift]
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(withTitle: "Export...", action: #selector(MainWindowController.exportImage(_:)), keyEquivalent: "e")
+        fileMenu.addItem(withTitle: "Share...", action: #selector(MainWindowController.shareImage(_:)), keyEquivalent: "")
         fileItem.submenu = fileMenu
 
         let editMenu = NSMenu(title: "Edit")

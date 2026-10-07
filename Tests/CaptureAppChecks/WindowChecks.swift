@@ -61,6 +61,7 @@ enum WindowChecks {
                 runInPlaceTextChecks()
                 runWindowSizingChecks()
                 runPNGOutputChecks()
+                runShareChecks(app: app)
                 runAnnotationCopyChecks(app: app)
                 runCenteredRenderingChecks()
                 runTextClickAwayChecks()
@@ -706,6 +707,57 @@ enum WindowChecks {
         try! data.write(to: directory.appendingPathComponent("transparent-output.png"))
         try! state.jpegData()!.write(to: directory.appendingPathComponent("sampled-background-output.jpg"))
         print("PASS: clipboard publishes transparent PNG; export defaults to PNG and allows JPEG")
+    }
+
+    static func runShareChecks(app: NSApplication) {
+        let state = AnnotationDocumentState()
+        let controller = MainWindowController(state: state)
+        let window = controller.window!
+        controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(canvas(in: window))
+        let item = NSMenuItem(title: "Share...", action: #selector(MainWindowController.shareImage(_:)), keyEquivalent: "")
+        precondition(!controller.validateMenuItem(item))
+        precondition((app.target(forAction: item.action!) as? MainWindowController) === controller)
+        let context = CGContext(data: nil, width: 120, height: 80, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.setFillColor(NSColor.red.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: 60, height: 80))
+        state.load(image: NSImage(cgImage: context.makeImage()!, size: CGSize(width: 120, height: 80)))
+        precondition(controller.validateMenuItem(item))
+        let revision = state.revisionID
+        let edited = window.isDocumentEdited
+        let clipboardChange = NSPasteboard.general.changeCount
+        let session = try! controller.preparePNGShare()
+        let second = try! controller.preparePNGShare()
+        precondition(session.fileURL != second.fileURL)
+        precondition(session.fileURL.lastPathComponent == "annotation.png")
+        let bytes = try! Data(contentsOf: session.fileURL)
+        precondition(bytes == state.imageData(format: .png))
+        let bitmap = NSBitmapImageRep(data: bytes)!
+        precondition(bitmap.pixelsWide == 120 && bitmap.pixelsHigh == 80)
+        precondition(bitmap.colorAt(x: 100, y: 40)!.alphaComponent == 0)
+        precondition(state.revisionID == revision && window.isDocumentEdited == edited)
+        precondition(NSPasteboard.general.changeCount == clipboardChange)
+        let picker = NSSharingServicePicker(items: [session.fileURL])
+        let service = NSSharingService(named: .composeEmail)!
+        session.sharingServicePicker(picker, didChoose: service)
+        precondition(FileManager.default.fileExists(atPath: session.fileURL.path), "Choosing a destination must retain its attachment")
+        session.sharingService(service, didShareItems: [session.fileURL])
+        precondition(!FileManager.default.fileExists(atPath: session.fileURL.path))
+        second.sharingServicePicker(picker, didChoose: nil)
+        precondition(!FileManager.default.fileExists(atPath: second.fileURL.path))
+        let failed = try! controller.preparePNGShare()
+        var receivedError = false
+        failed.onFailure = { _ in receivedError = true }
+        failed.sharingService(service, didFailToShareItems: [failed.fileURL], error: NSError(domain: "Test", code: 1))
+        precondition(receivedError && !FileManager.default.fileExists(atPath: failed.fileURL.path))
+        do {
+            _ = try controller.preparePNGShare(directory: URL(fileURLWithPath: "/dev/null"))
+            preconditionFailure("Writing under a file must fail")
+        } catch { }
+        window.close()
+        print("PASS: Share routing, validation, full transparent PNG, independent files, unchanged document/clipboard, completion/cancellation/failure cleanup")
     }
 
     static func runCenteredRenderingChecks() {
