@@ -343,6 +343,9 @@ public final class BlurAnnotation: Annotation {
         }
 
         context.saveGState()
+        // Replace the source pixels, including alpha, just as applyBlur does.
+        context.clip(to: normalized)
+        context.setBlendMode(.copy)
         context.draw(blurred, in: normalized)
         context.restoreGState()
     }

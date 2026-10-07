@@ -11,6 +11,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var sourceURL: URL?
     private var sourceFormat: RasterImageFormat?
     private var savedRevisionID: UUID?
+    private weak var shareSession: PNGShareSession?
     var onWindowClosed: ((MainWindowController) -> Void)?
     private static let toolShortcuts: [Tool: String] = [
         .arrow: "a", .text: "t", .ellipse: "e", .rectangle: "r", .blur: "b", .crop: "c"
@@ -556,6 +557,39 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         statusLabel.stringValue = "Copied flattened image"
     }
 
+    func preparePNGShare(directory: URL = FileManager.default.temporaryDirectory) throws -> PNGShareSession {
+        canvasView.commitTextEditing()
+        guard let data = state.imageData(format: .png) else {
+            throw NSError(domain: "Capture.Share", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Capture could not render this image for sharing."])
+        }
+        return try PNGShareSession(data: data, filename: suggestedSaveName(format: .png), directory: directory)
+    }
+
+    @objc func shareImage(_ sender: Any?) {
+        guard state.hasImage, shareSession == nil else { return }
+        do {
+            let session = try preparePNGShare()
+            shareSession = session
+            session.onFailure = { [weak self] error in self?.presentShareError(error) }
+            session.present(in: canvasView)
+        } catch {
+            presentShareError(error)
+        }
+    }
+
+    private func presentShareError(_ error: Error) {
+        statusLabel.stringValue = "Share failed: \(error.localizedDescription)"
+        let alert = NSAlert()
+        alert.messageText = "Share Failed"
+        alert.informativeText = error.localizedDescription
+        if let window, window.isVisible, window.attachedSheet == nil {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
     @objc func save(_ sender: Any?) {
         _ = saveCurrentImage()
     }
@@ -600,6 +634,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(shareImage(_:)) {
+            return state.hasImage && shareSession == nil
+        }
         if menuItem.action == #selector(copy(_:)) || menuItem.action == #selector(copySelectedAnnotation(_:)) {
             return state.canCopySelectedAnnotation
         }
@@ -844,4 +881,74 @@ final class ShortcutSizeControl: NSSegmentedControl {
             ShortcutBadge.draw(String(index + 1), at: CGPoint(x: CGFloat(index + 1) * segmentWidth - 1, y: bounds.maxY - 12), height: 12)
         }
     }
+}
+
+// Retained independently of the document window until the destination finishes.
+final class PNGShareSession: NSObject, NSSharingServicePickerDelegate, NSSharingServiceDelegate {
+    private static var active: [UUID: PNGShareSession] = [:]
+    static var hasActiveSessions: Bool { !active.isEmpty }
+    private let id = UUID()
+    let fileURL: URL
+    private let directory: URL
+    private var picker: NSSharingServicePicker?
+    private var service: NSSharingService?
+    private weak var sourceWindow: NSWindow?
+    var onFailure: ((Error) -> Void)?
+
+    init(data: Data, filename: String, directory parent: URL) throws {
+        directory = parent.appendingPathComponent("Capture-Share-" + UUID().uuidString, isDirectory: true)
+        fileURL = directory.appendingPathComponent(filename)
+        super.init()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        do {
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
+    }
+
+    func present(in view: NSView) {
+        Self.active[id] = self
+        sourceWindow = view.window
+        let picker = NSSharingServicePicker(items: [fileURL])
+        self.picker = picker
+        picker.delegate = self
+        let y = view.isFlipped ? view.bounds.minY + 8 : view.bounds.maxY - 8
+        picker.show(relativeTo: NSRect(x: view.bounds.midX, y: y, width: 1, height: 1),
+                    of: view, preferredEdge: .minY)
+    }
+
+    func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker,
+                              delegateFor sharingService: NSSharingService) -> NSSharingServiceDelegate? { self }
+
+    func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker,
+                              didChoose service: NSSharingService?) {
+        self.service = service
+        if service == nil { finish() }
+    }
+
+    func sharingService(_ sharingService: NSSharingService, didShareItems items: [Any]) { finish() }
+
+    func sharingService(_ sharingService: NSSharingService, didFailToShareItems items: [Any], error: Error) {
+        let callback = onFailure
+        finish()
+        if (error as NSError).code != NSUserCancelledError { callback?(error) }
+    }
+
+    func sharingService(_ sharingService: NSSharingService, sourceWindowForShareItems items: [Any],
+                        sharingContentScope: UnsafeMutablePointer<NSSharingService.SharingContentScope>) -> NSWindow? {
+        sharingContentScope.pointee = .full
+        return sourceWindow
+    }
+
+    private func finish() {
+        try? FileManager.default.removeItem(at: directory)
+        picker = nil
+        service = nil
+        onFailure = nil
+        Self.active[id] = nil
+    }
+
+    deinit { try? FileManager.default.removeItem(at: directory) }
 }

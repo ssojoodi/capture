@@ -471,6 +471,51 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertEqual(state.revisionID, editedRevision)
     }
 
+    func testAppliedBlurPreservesAlphaAndPNGThroughUndoRedo() throws {
+        let context = try XCTUnwrap(CGContext(data: nil, width: 120, height: 80,
+            bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(NSColor.red.withAlphaComponent(0.5).cgColor)
+        context.fill(CGRect(x: 40, y: 0, width: 40, height: 80))
+        context.setFillColor(NSColor.white.cgColor)
+        context.fill(CGRect(x: 80, y: 0, width: 40, height: 80))
+        let state = AnnotationDocumentState()
+        state.load(image: NSImage(cgImage: try XCTUnwrap(context.makeImage()), size: CGSize(width: 120, height: 80)))
+        let original = try XCTUnwrap(state.imageData())
+        state.applyBlur(CGRect(x: 0, y: 20, width: 120, height: 40), radius: 10)
+        func checkAlpha() throws {
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(state.imageData(format: .png))))
+            for y in [5, 40, 75] {
+                XCTAssertEqual(try XCTUnwrap(bitmap.colorAt(x: 10, y: y)).alphaComponent, 0, accuracy: 0.01)
+                let translucent = try XCTUnwrap(bitmap.colorAt(x: 60, y: y)?.usingColorSpace(.sRGB))
+                XCTAssertEqual(translucent.alphaComponent, 0.5, accuracy: 0.01)
+                XCTAssertEqual(translucent.redComponent, 1, accuracy: 0.02)
+                XCTAssertEqual(try XCTUnwrap(bitmap.colorAt(x: 100, y: y)).alphaComponent, 1, accuracy: 0.01)
+            }
+        }
+        try checkAlpha()
+        XCTAssertTrue(state.undo())
+        XCTAssertEqual(state.imageData(), original)
+        XCTAssertTrue(state.redo())
+        try checkAlpha()
+    }
+
+    func testBlurPreviewMatchesCommittedTranslucency() throws {
+        let state = AnnotationDocumentState()
+        state.load(image: solidImage(width: 80, height: 80, color: NSColor.red.withAlphaComponent(0.5)))
+        let rect = CGRect(x: 20, y: 20, width: 40, height: 40)
+        let annotation = BlurAnnotation(bounds: rect, radius: 10)
+        state.addAnnotation(annotation)
+        let preview = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(state.imageData())))
+        XCTAssertTrue(state.undo())
+        state.applyBlur(rect, radius: 10)
+        let committed = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(state.imageData())))
+        let previewAlpha = try XCTUnwrap(preview.colorAt(x: 40, y: 40)).alphaComponent
+        let committedAlpha = try XCTUnwrap(committed.colorAt(x: 40, y: 40)).alphaComponent
+        XCTAssertEqual(previewAlpha, 0.5, accuracy: 0.01)
+        XCTAssertEqual(previewAlpha, committedAlpha, accuracy: 0.01)
+    }
+
     func testBlurChangesPixelsInsideBlurRect() throws {
         let state = AnnotationDocumentState()
         state.load(image: checkerboardImage(width: 80, height: 80, blockSize: 4))
