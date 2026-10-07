@@ -114,7 +114,7 @@ extension AnnotationDocumentState {
             bitsPerComponent: 8,
             bytesPerRow: 0,
             space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return }
 
         context.interpolationQuality = .high

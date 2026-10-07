@@ -15,7 +15,7 @@ public enum BlurRenderer {
         guard !pixelRect.isNull, let crop = baseImage.cropping(to: pixelRect) else { return nil }
 
         let colorSpace = baseImage.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGImageAlphaInfo.noneSkipLast.rawValue
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
         let pixelSize = max(4, radius)
         let sampleWidth = max(1, Int((normalized.width / pixelSize).rounded(.up)))
         let sampleHeight = max(1, Int((normalized.height / pixelSize).rounded(.up)))
