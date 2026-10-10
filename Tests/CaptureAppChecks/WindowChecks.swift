@@ -68,6 +68,7 @@ enum WindowChecks {
                 runDuplicateChecks()
                 runTextBoundsChecks()
                 runTextDragChecks()
+                runShapeDragChecks()
                 runInPlaceTextChecks()
                 runWindowSizingChecks()
                 runPNGOutputChecks()
@@ -417,6 +418,62 @@ enum WindowChecks {
         first.close()
     }
 
+    static func runShapeDragChecks() {
+        for tool in [Tool.rectangle, .ellipse, .arrow] {
+            for scale: CGFloat in [1, 0.8] {
+                for pair in [(CGPoint(x: -70, y: -60), CGPoint(x: -20, y: -10)),
+                             (CGPoint(x: 150, y: 130), CGPoint(x: -40, y: -30))] {
+                    let state = AnnotationDocumentState()
+                    state.load(image: NSImage(size: CGSize(width: 100, height: 80), flipped: false) { rect in
+                        NSColor.white.setFill(); rect.fill(); return true
+                    })
+                    let controller = MainWindowController(state: state)
+                    let window = controller.window!
+                    controller.showWindow(nil)
+                    window.layoutIfNeeded()
+                    let canvas = canvas(in: window)
+                    canvas.zoomToFit()
+                    canvas.resetZoom()
+                    if scale < 1 { canvas.zoomOut() }
+                    state.selectedTool = tool
+                    canvas.toolDidChange()
+                    func event(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent {
+                        let location = canvas.convert(CGPoint(x: canvas.bounds.midX + (point.x - state.imageSize.width / 2) * scale,
+                                                             y: canvas.bounds.midY + (point.y - state.imageSize.height / 2) * scale), to: nil)
+                        return NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: 0,
+                            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                    }
+                    let revision = state.revisionID
+                    canvas.mouseDown(with: event(.leftMouseDown, pair.0))
+                    canvas.mouseDragged(with: event(.leftMouseDragged, pair.1))
+                    precondition(state.annotations.isEmpty && state.revisionID == revision)
+                    canvas.cancelInteraction()
+                    canvas.mouseUp(with: event(.leftMouseUp, pair.1))
+                    precondition(state.annotations.isEmpty)
+                    canvas.mouseDown(with: event(.leftMouseDown, pair.0))
+                    canvas.mouseUp(with: event(.leftMouseUp, pair.1))
+                    let annotation = state.annotations.first!
+                    let expected = CGRect(x: pair.0.x, y: pair.0.y, width: pair.1.x - pair.0.x, height: pair.1.y - pair.0.y).normalized
+                    precondition(abs(annotation.bounds.minX - expected.minX) < 0.001, "\(tool) at \(scale): \(annotation.bounds), expected \(expected)")
+                    precondition(abs(annotation.bounds.minY - expected.minY) < 0.001)
+                    precondition(abs(annotation.bounds.width - expected.width) < 0.001)
+                    precondition(abs(annotation.bounds.height - expected.height) < 0.001)
+                    if let arrow = annotation as? ArrowAnnotation {
+                        precondition(hypot(arrow.start.x - pair.0.x, arrow.start.y - pair.0.y) < 0.001)
+                        precondition(hypot(arrow.end.x - pair.1.x, arrow.end.y - pair.1.y) < 0.001)
+                    }
+                    let expanded = state.canvasBounds
+                    precondition(expanded.contains(annotation.renderedBounds))
+                    precondition(state.flattenedImage()!.size == expanded.size)
+                    precondition(state.undo() && state.canvasBounds == CGRect(origin: .zero, size: state.imageSize))
+                    precondition(state.redo() && state.canvasBounds == expanded)
+                    window.close()
+                }
+            }
+        }
+        print("PASS: rectangle, oval and arrow creation outside image, reverse drags, zoom, cancellation, final endpoint, export and undo/redo")
+    }
+
     static func runTextDragChecks() {
         for zoomOut in [false, true] {
             for delta in [CGSize(width: 160, height: 100), CGSize(width: -160, height: 100),
@@ -547,20 +604,20 @@ enum WindowChecks {
         precondition(state.undo() && state.annotations[0].bounds == enlarged)
         precondition(state.redo() && state.annotations[0].bounds.minX == -150)
 
-        // Creation stays bounded; resizing that same shape in Select can exceed the image.
+        // Creation and subsequent Select resizing can both exceed the image.
         state.selectedAnnotationID = nil
         state.selectedTool = .rectangle
         canvas.toolDidChange()
         canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 500, y: 350)))
         canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 680, y: 490)))
         canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 680, y: 490)))
-        precondition(state.annotations.last!.bounds == CGRect(x: 300, y: 200, width: 100, height: 100))
+        precondition(state.annotations.last!.bounds == CGRect(x: 300, y: 200, width: 180, height: 140))
         state.selectedTool = .select
         canvas.toolDidChange()
-        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 600, y: 450)))
-        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 680, y: 490)))
-        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 680, y: 490)))
-        precondition(state.annotations.last!.bounds == CGRect(x: 300, y: 200, width: 180, height: 140))
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 680, y: 490)))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 720, y: 530)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 720, y: 530)))
+        precondition(state.annotations.last!.bounds == CGRect(x: 300, y: 200, width: 220, height: 180))
         let expandedOutput = state.flattenedImage()!
         precondition(expandedOutput.size == state.canvasBounds.size, "Output must include the expanded canvas")
         let outputBitmap = NSBitmapImageRep(cgImage: expandedOutput.cgImageForRendering()!)

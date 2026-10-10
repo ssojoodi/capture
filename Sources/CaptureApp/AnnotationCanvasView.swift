@@ -152,8 +152,8 @@ final class AnnotationCanvasView: NSView {
         context.scaleBy(x: zoom, y: zoom)
         let imageRect = CGRect(origin: .zero, size: state.imageSize)
         var previewBounds = state.canvasBounds
-        if case let .creatingAnnotation(_, annotation) = interaction, annotation is TextAnnotation {
-            previewBounds = previewBounds.union(annotation.bounds).integral
+        if case let .creatingAnnotation(_, annotation) = interaction, !(annotation is BlurAnnotation) {
+            previewBounds = previewBounds.union(annotation.renderedBounds).integral
         }
         context.saveGState()
         context.addRect(previewBounds)
@@ -347,7 +347,7 @@ final class AnnotationCanvasView: NSView {
         let point = rawPoint.clampedToImage(size: state.imageSize)
         switch state.selectedTool {
         case .arrow:
-            interaction = .creatingAnnotation(start: point, annotation: ArrowAnnotation(start: point, end: point, color: currentColor, strokeWidth: drawingSize.lineThickness))
+            interaction = .creatingAnnotation(start: rawPoint, annotation: ArrowAnnotation(start: rawPoint, end: rawPoint, color: currentColor, strokeWidth: drawingSize.lineThickness))
         case .text:
             let annotation = TextAnnotation(
                 bounds: CGRect(origin: rawPoint, size: .zero),
@@ -361,9 +361,9 @@ final class AnnotationCanvasView: NSView {
         case .blur:
             interaction = .creatingAnnotation(start: point, annotation: BlurAnnotation(bounds: CGRect(origin: point, size: .zero)))
         case .rectangle:
-            interaction = .creatingAnnotation(start: point, annotation: RectangleAnnotation(bounds: CGRect(origin: point, size: .zero), strokeColor: currentColor, strokeWidth: drawingSize.lineThickness))
+            interaction = .creatingAnnotation(start: rawPoint, annotation: RectangleAnnotation(bounds: CGRect(origin: rawPoint, size: .zero), strokeColor: currentColor, strokeWidth: drawingSize.lineThickness))
         case .ellipse:
-            interaction = .creatingAnnotation(start: point, annotation: EllipseAnnotation(bounds: CGRect(origin: point, size: .zero), strokeColor: currentColor, strokeWidth: drawingSize.lineThickness))
+            interaction = .creatingAnnotation(start: rawPoint, annotation: EllipseAnnotation(bounds: CGRect(origin: rawPoint, size: .zero), strokeColor: currentColor, strokeWidth: drawingSize.lineThickness))
         case .crop:
             interaction = .creatingCrop(start: point, rect: CGRect(origin: point, size: .zero))
         case .select:
@@ -487,10 +487,10 @@ final class AnnotationCanvasView: NSView {
             annotation.moveBy(dx: rawPoint.x - lastPoint.x, dy: rawPoint.y - lastPoint.y)
             interaction = .moving(annotation: annotation, lastPoint: rawPoint, didRecordUndo: true)
         case let .creatingAnnotation(start, annotation):
-            let end = annotation is TextAnnotation ? rawPoint : point
+            let end = annotation is BlurAnnotation ? point : rawPoint
             let rect = CGRect(x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y).normalized
             if let arrow = annotation as? ArrowAnnotation {
-                arrow.end = point
+                arrow.end = end
             } else {
                 annotation.bounds = rect
             }
@@ -516,6 +516,16 @@ final class AnnotationCanvasView: NSView {
             textPlacementID = text.id
             statusHandler?("Added text annotation")
             return
+        }
+
+        // Include the final pointer position even if no drag event arrived there.
+        if case let .creatingAnnotation(start, annotation) = interaction, !(annotation is BlurAnnotation) {
+            let end = imagePoint(for: event.locationInWindow)
+            if let arrow = annotation as? ArrowAnnotation {
+                arrow.end = end
+            } else {
+                annotation.bounds = CGRect(x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y).normalized
+            }
         }
 
         if case let .creatingAnnotation(_, annotation) = interaction,
