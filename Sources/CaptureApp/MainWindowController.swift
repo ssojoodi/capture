@@ -131,7 +131,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [weak self] event in
             guard let self, let window = self.window else { return event }
             if event.type == .flagsChanged {
                 self.updateShortcutHints(event.modifierFlags)
@@ -139,7 +139,20 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             }
             guard event.window === window, window.isKeyWindow,
                   NSApp.modalWindow == nil, window.attachedSheet == nil else { return event }
+            if event.type == .keyUp {
+                if event.keyCode == 49, self.canvasView.isSpacePanEnabled {
+                    self.canvasView.setSpacePanEnabled(false)
+                    return nil
+                }
+                return event
+            }
             let shortcutModifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
+            if event.keyCode == 49, shortcutModifiers.isEmpty,
+               self.state.selectedTool == .select, !self.canvasView.isEditingText,
+               !(window.firstResponder is NSTextView), self.state.hasImage {
+                self.canvasView.setSpacePanEnabled(true)
+                return nil
+            }
             if shortcutModifiers == .option,
                let key = event.characters(byApplyingModifiers: [])?.lowercased() {
                 if let tool = Self.toolShortcuts.first(where: { $0.value == key })?.key {
@@ -675,10 +688,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func windowDidResignKey(_ notification: Notification) {
+        canvasView.setSpacePanEnabled(false)
         updateShortcutHints([])
     }
 
     func windowWillBeginSheet(_ notification: Notification) {
+        canvasView.setSpacePanEnabled(false)
         updateShortcutHints([])
     }
 

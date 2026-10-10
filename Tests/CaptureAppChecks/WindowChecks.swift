@@ -69,6 +69,7 @@ enum WindowChecks {
                 runTextBoundsChecks()
                 runTextDragChecks()
                 runShapeDragChecks()
+                runPanChecks(app: app)
                 runInPlaceTextChecks()
                 runWindowSizingChecks()
                 runPNGOutputChecks()
@@ -416,6 +417,86 @@ enum WindowChecks {
         // Avoid triggering the application's last-window-closed quit during cleanup.
         app.delegate = nil
         first.close()
+    }
+
+    static func runPanChecks(app: NSApplication) {
+        let state = AnnotationDocumentState()
+        state.load(image: NSImage(size: CGSize(width: 600, height: 400), flipped: false) { rect in
+            NSColor.white.setFill(); rect.fill(); return true
+        })
+        let text = TextAnnotation(bounds: CGRect(x: 100, y: 100, width: 200, height: 100), text: "Pan me")
+        state.addAnnotation(text, select: true)
+        state.selectedTool = .select
+        let controller = MainWindowController(state: state)
+        controller.showWindow(nil)
+        let window = controller.window!
+        window.makeKeyAndOrderFront(nil)
+        let canvas = canvas(in: window)
+        canvas.zoomToFit()
+        window.makeFirstResponder(canvas)
+        func space(_ type: NSEvent.EventType) {
+            app.sendEvent(NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, characters: " ", charactersIgnoringModifiers: " ",
+                isARepeat: false, keyCode: 49)!)
+        }
+        func mouse(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: canvas.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        let originalBounds = text.bounds
+        let revision = state.revisionID
+        let png = state.imageData()!
+        let selection = state.selectedAnnotationID
+        let initialOrigin = canvas.imageOrigin
+        space(.keyDown)
+        precondition(canvas.isSpacePanEnabled)
+        let start = CGPoint(x: canvas.bounds.midX, y: canvas.bounds.midY)
+        canvas.mouseDown(with: mouse(.leftMouseDown, start))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, CGPoint(x: start.x + 120, y: start.y - 60)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, CGPoint(x: start.x + 140, y: start.y - 80)))
+        space(.keyUp)
+        precondition(canvas.imageOrigin == CGPoint(x: initialOrigin.x + 140, y: initialOrigin.y - 80))
+        canvas.layout()
+        precondition(canvas.imageOrigin == CGPoint(x: initialOrigin.x + 140, y: initialOrigin.y - 80), "Layout must not reset a pan")
+        precondition(!canvas.isSpacePanEnabled)
+        precondition(text.bounds == originalBounds && state.revisionID == revision && state.selectedAnnotationID == selection)
+        precondition(state.imageData() == png)
+        let scroll = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 30, wheel2: -50, wheel3: 0)!
+        let scrollEvent = NSEvent(cgEvent: scroll)!
+        let beforeScroll = canvas.imageOrigin
+        canvas.scrollWheel(with: scrollEvent)
+        let multiplier: CGFloat = scrollEvent.hasPreciseScrollingDeltas ? 1 : 10
+        precondition(canvas.imageOrigin == CGPoint(x: beforeScroll.x + scrollEvent.scrollingDeltaX * multiplier,
+                                                  y: beforeScroll.y + scrollEvent.scrollingDeltaY * multiplier))
+        precondition(state.revisionID == revision && state.imageData() == png)
+        space(.keyDown)
+        controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification, object: window))
+        precondition(!canvas.isSpacePanEnabled)
+        canvas.zoomToFit()
+        precondition(canvas.imageOrigin == initialOrigin)
+        precondition(state.imageData() == png)
+        canvas.resetZoom()
+        canvas.zoomIn()
+        let zoomedOrigin = canvas.imageOrigin
+        space(.keyDown)
+        canvas.mouseDown(with: mouse(.leftMouseDown, start))
+        canvas.mouseUp(with: mouse(.leftMouseUp, CGPoint(x: start.x + 25, y: start.y + 35)))
+        space(.keyUp)
+        precondition(canvas.imageOrigin == CGPoint(x: zoomedOrigin.x + 25, y: zoomedOrigin.y + 35), "Pan must use screen points at any zoom")
+        canvas.resetZoom()
+        let textPoint = CGPoint(x: canvas.imageOrigin.x + text.bounds.midX, y: canvas.imageOrigin.y + text.bounds.midY)
+        let editEvent = NSEvent.mouseEvent(with: .leftMouseDown, location: canvas.convert(textPoint, to: nil),
+            modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 2, pressure: 1)!
+        canvas.mouseDown(with: editEvent)
+        precondition(canvas.isEditingText)
+        space(.keyDown)
+        space(.keyUp)
+        precondition(!canvas.isSpacePanEnabled)
+        let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+        precondition(editor.text == "Pan me ", "Space must remain text input while editing")
+        canvas.commitTextEditing()
+        window.close()
+        print("PASS: Space pan key routing, mouse and trackpad gestures preserve image/selection/revision, focus-loss cleanup and Fit")
     }
 
     static func runShapeDragChecks() {
