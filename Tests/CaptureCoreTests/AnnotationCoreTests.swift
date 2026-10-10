@@ -57,25 +57,6 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertFalse(arrow.hitTest(CGPoint(x: 50, y: 60)))
     }
 
-    func testNewTextBoxesUseRemainingCanvasWidthAndMargins() {
-        let canvas = CGRect(x: 0, y: 0, width: 1000, height: 700)
-        let box = TextAnnotationLayout.initialBounds(at: CGPoint(x: 100, y: 200), canvas: canvas, fontSize: 52)
-        XCTAssertEqual(box, CGRect(x: 100, y: 200, width: 880, height: 76))
-        for point in [CGPoint(x: 0, y: 0), CGPoint(x: 1000, y: 700), CGPoint(x: 999, y: 1)] {
-            let edge = TextAnnotationLayout.initialBounds(at: point, canvas: canvas, fontSize: 82)
-            XCTAssertTrue(canvas.insetBy(dx: 20, dy: 20).contains(edge))
-            XCTAssertGreaterThanOrEqual(edge.width, 260)
-            XCTAssertEqual(edge.maxX, 980)
-        }
-        let tiny = CGRect(x: -10, y: -20, width: 30, height: 20)
-        let small = TextAnnotationLayout.initialBounds(at: .zero, canvas: tiny, fontSize: 82)
-        XCTAssertEqual(small, tiny.insetBy(dx: 5, dy: 5))
-        let expanded = CGRect(x: -100, y: -50, width: 1300, height: 800)
-        let outside = TextAnnotationLayout.initialBounds(at: CGPoint(x: -80, y: -30), canvas: expanded, fontSize: 52)
-        XCTAssertEqual(outside.minX, -80)
-        XCTAssertEqual(outside.maxX, 1180)
-    }
-
     func testTextLayoutCentersSingleAndMultipleLines() {
         for text in ["Centered", "First line\nSecond line", "Ends with newline\n", ""] {
             let font = NSFont.boldSystemFont(ofSize: 32)

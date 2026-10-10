@@ -142,16 +142,6 @@ public enum TextAnnotationLayout {
     public static func verticalOffset(height: CGFloat, contentHeight: CGFloat, scale: CGFloat = 1) -> CGFloat {
         max(verticalInset * scale, (height - contentHeight) / 2)
     }
-
-    public static func initialBounds(at point: CGPoint, canvas: CGRect, fontSize: CGFloat) -> CGRect {
-        let margin = min(20, min(canvas.width, canvas.height) / 4)
-        let available = canvas.insetBy(dx: margin, dy: margin)
-        let minimumWidth = min(260, available.width)
-        let x = min(max(point.x, available.minX), available.maxX - minimumWidth)
-        let manager = NSLayoutManager()
-        let height = max(76, manager.defaultLineHeight(for: .boldSystemFont(ofSize: fontSize)) + verticalInset * 2)
-        return CGRect(x: x, y: point.y, width: available.maxX - x, height: height).fitted(inside: available)
-    }
 }
 
 public final class TextAnnotation: Annotation {

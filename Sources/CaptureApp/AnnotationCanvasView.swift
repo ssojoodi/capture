@@ -151,12 +151,16 @@ final class AnnotationCanvasView: NSView {
         context.translateBy(x: imageOrigin.x, y: imageOrigin.y)
         context.scaleBy(x: zoom, y: zoom)
         let imageRect = CGRect(origin: .zero, size: state.imageSize)
+        var previewBounds = state.canvasBounds
+        if case let .creatingAnnotation(_, annotation) = interaction, annotation is TextAnnotation {
+            previewBounds = previewBounds.union(annotation.bounds).integral
+        }
         context.saveGState()
-        context.addRect(state.canvasBounds)
+        context.addRect(previewBounds)
         context.addRect(imageRect)
         context.clip(using: .evenOdd)
         context.setFillColor(NSColor.white.cgColor)
-        context.fill(state.canvasBounds)
+        context.fill(previewBounds)
         context.restoreGState()
         context.draw(baseCGImage, in: imageRect)
 
@@ -346,17 +350,14 @@ final class AnnotationCanvasView: NSView {
             interaction = .creatingAnnotation(start: point, annotation: ArrowAnnotation(start: point, end: point, color: currentColor, strokeWidth: drawingSize.lineThickness))
         case .text:
             let annotation = TextAnnotation(
-                bounds: TextAnnotationLayout.initialBounds(at: rawPoint, canvas: state.canvasBounds, fontSize: drawingSize.textSize),
+                bounds: CGRect(origin: rawPoint, size: .zero),
                 text: "",
                 fontSize: drawingSize.textSize,
                 textColor: currentColor,
                 backgroundColor: currentTextBackground,
                 drawsBackground: currentTextBackground.alphaComponent > 0
             )
-            state.addAnnotation(annotation, select: true)
-            beginEditing(annotation, isNew: true)
-            textPlacementID = annotation.id
-            statusHandler?("Added text annotation")
+            interaction = .creatingAnnotation(start: rawPoint, annotation: annotation)
         case .blur:
             interaction = .creatingAnnotation(start: point, annotation: BlurAnnotation(bounds: CGRect(origin: point, size: .zero)))
         case .rectangle:
@@ -486,7 +487,8 @@ final class AnnotationCanvasView: NSView {
             annotation.moveBy(dx: rawPoint.x - lastPoint.x, dy: rawPoint.y - lastPoint.y)
             interaction = .moving(annotation: annotation, lastPoint: rawPoint, didRecordUndo: true)
         case let .creatingAnnotation(start, annotation):
-            let rect = CGRect(x: start.x, y: start.y, width: point.x - start.x, height: point.y - start.y).normalized
+            let end = annotation is TextAnnotation ? rawPoint : point
+            let rect = CGRect(x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y).normalized
             if let arrow = annotation as? ArrowAnnotation {
                 arrow.end = point
             } else {
@@ -503,6 +505,17 @@ final class AnnotationCanvasView: NSView {
         defer {
             interaction = .idle
             needsDisplay = true
+        }
+
+        if case let .creatingAnnotation(start, annotation) = interaction, let text = annotation as? TextAnnotation {
+            let end = imagePoint(for: event.locationInWindow)
+            text.bounds = CGRect(x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y).normalized
+            guard text.bounds.width * zoom > 4, text.bounds.height * zoom > 4 else { return }
+            state.addAnnotation(text, select: true)
+            beginEditing(text, isNew: true)
+            textPlacementID = text.id
+            statusHandler?("Added text annotation")
+            return
         }
 
         if case let .creatingAnnotation(_, annotation) = interaction,
