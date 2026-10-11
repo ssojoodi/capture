@@ -13,6 +13,7 @@ final class AnnotationCanvasView: NSView {
 
     private enum CanvasInteraction {
         case idle
+        case panning(lastPoint: CGPoint)
         case creatingAnnotation(start: CGPoint, annotation: Annotation)
         case creatingCrop(start: CGPoint, rect: CGRect)
         case moving(annotation: Annotation, lastPoint: CGPoint, didRecordUndo: Bool)
@@ -21,7 +22,9 @@ final class AnnotationCanvasView: NSView {
 
     private let state: AnnotationDocumentState
     private var zoom: CGFloat = 1
-    private var imageOrigin: CGPoint = .zero
+    private(set) var imageOrigin: CGPoint = .zero
+    private var hasPanned = false
+    private(set) var isSpacePanEnabled = false
     private var interaction: CanvasInteraction = .idle
     private var currentColor: NSColor = CapturePalette.softRed
     private var defaultSize: SizePreset = .medium
@@ -53,6 +56,7 @@ final class AnnotationCanvasView: NSView {
     var zoomPercentage: Int { Int((zoom * 100).rounded()) }
 
     func toolDidChange() {
+        setSpacePanEnabled(false)
         commitActiveTextEdit()
         if state.selectedTool != .select { state.selectedAnnotationID = nil }
         textPlacementID = nil
@@ -64,11 +68,13 @@ final class AnnotationCanvasView: NSView {
 
     func cancelInteraction() {
         interaction = .idle
+        window?.invalidateCursorRects(for: self)
         repositionActiveTextEditor()
         needsDisplay = true
     }
 
     func zoomToFit() {
+        hasPanned = false
         guard state.imageSize.width > 0, state.imageSize.height > 0 else { return }
         let inset: CGFloat = 72
         let available = bounds.insetBy(dx: inset, dy: inset).size
@@ -117,7 +123,7 @@ final class AnnotationCanvasView: NSView {
 
     override func layout() {
         super.layout()
-        if state.hasImage, zoom <= 1 {
+        if state.hasImage, zoom <= 1, !hasPanned {
             centerImage()
         }
         repositionActiveTextEditor()
@@ -128,13 +134,37 @@ final class AnnotationCanvasView: NSView {
         let cursor: NSCursor
         switch state.selectedTool {
         case .select:
-            cursor = .arrow
+            if case .panning = interaction { cursor = .closedHand }
+            else { cursor = isSpacePanEnabled ? .openHand : .arrow }
         case .text:
             cursor = .iBeam
         case .arrow, .blur, .crop, .rectangle, .ellipse:
             cursor = .crosshair
         }
         addCursorRect(bounds, cursor: cursor)
+    }
+
+    func setSpacePanEnabled(_ enabled: Bool) {
+        isSpacePanEnabled = enabled && state.hasImage && state.selectedTool == .select && !isEditingText
+        if !isSpacePanEnabled, case .panning = interaction { interaction = .idle }
+        window?.invalidateCursorRects(for: self)
+    }
+
+    private func pan(by delta: CGPoint) {
+        guard delta.x != 0 || delta.y != 0 else { return }
+        imageOrigin.x += delta.x
+        imageOrigin.y += delta.y
+        hasPanned = true
+        repositionActiveTextEditor()
+        needsDisplay = true
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard state.hasImage else { super.scrollWheel(with: event); return }
+        guard case .idle = interaction else { return }
+        // AppKit supplies signed deltas honoring the user's scrolling direction.
+        let multiplier: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 10
+        pan(by: CGPoint(x: event.scrollingDeltaX * multiplier, y: event.scrollingDeltaY * multiplier))
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -151,12 +181,16 @@ final class AnnotationCanvasView: NSView {
         context.translateBy(x: imageOrigin.x, y: imageOrigin.y)
         context.scaleBy(x: zoom, y: zoom)
         let imageRect = CGRect(origin: .zero, size: state.imageSize)
+        var previewBounds = state.canvasBounds
+        if case let .creatingAnnotation(_, annotation) = interaction, !(annotation is BlurAnnotation) {
+            previewBounds = previewBounds.union(annotation.renderedBounds).integral
+        }
         context.saveGState()
-        context.addRect(state.canvasBounds)
+        context.addRect(previewBounds)
         context.addRect(imageRect)
         context.clip(using: .evenOdd)
         context.setFillColor(NSColor.white.cgColor)
-        context.fill(state.canvasBounds)
+        context.fill(previewBounds)
         context.restoreGState()
         context.draw(baseCGImage, in: imageRect)
 
@@ -305,6 +339,12 @@ final class AnnotationCanvasView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        if isSpacePanEnabled, state.selectedTool == .select, state.hasImage {
+            window?.makeFirstResponder(self)
+            interaction = .panning(lastPoint: convert(event.locationInWindow, from: nil))
+            window?.invalidateCursorRects(for: self)
+            return
+        }
         if state.selectedTool == .text,
            let text = state.annotation(with: textPlacementID) as? TextAnnotation,
            !text.bounds.contains(imagePoint(for: event.locationInWindow)) {
@@ -343,26 +383,23 @@ final class AnnotationCanvasView: NSView {
         let point = rawPoint.clampedToImage(size: state.imageSize)
         switch state.selectedTool {
         case .arrow:
-            interaction = .creatingAnnotation(start: point, annotation: ArrowAnnotation(start: point, end: point, color: currentColor, strokeWidth: drawingSize.lineThickness))
+            interaction = .creatingAnnotation(start: rawPoint, annotation: ArrowAnnotation(start: rawPoint, end: rawPoint, color: currentColor, strokeWidth: drawingSize.lineThickness))
         case .text:
             let annotation = TextAnnotation(
-                bounds: TextAnnotationLayout.initialBounds(at: rawPoint, canvas: state.canvasBounds, fontSize: drawingSize.textSize),
+                bounds: CGRect(origin: rawPoint, size: .zero),
                 text: "",
                 fontSize: drawingSize.textSize,
                 textColor: currentColor,
                 backgroundColor: currentTextBackground,
                 drawsBackground: currentTextBackground.alphaComponent > 0
             )
-            state.addAnnotation(annotation, select: true)
-            beginEditing(annotation, isNew: true)
-            textPlacementID = annotation.id
-            statusHandler?("Added text annotation")
+            interaction = .creatingAnnotation(start: rawPoint, annotation: annotation)
         case .blur:
             interaction = .creatingAnnotation(start: point, annotation: BlurAnnotation(bounds: CGRect(origin: point, size: .zero)))
         case .rectangle:
-            interaction = .creatingAnnotation(start: point, annotation: RectangleAnnotation(bounds: CGRect(origin: point, size: .zero), strokeColor: currentColor, strokeWidth: drawingSize.lineThickness))
+            interaction = .creatingAnnotation(start: rawPoint, annotation: RectangleAnnotation(bounds: CGRect(origin: rawPoint, size: .zero), strokeColor: currentColor, strokeWidth: drawingSize.lineThickness))
         case .ellipse:
-            interaction = .creatingAnnotation(start: point, annotation: EllipseAnnotation(bounds: CGRect(origin: point, size: .zero), strokeColor: currentColor, strokeWidth: drawingSize.lineThickness))
+            interaction = .creatingAnnotation(start: rawPoint, annotation: EllipseAnnotation(bounds: CGRect(origin: rawPoint, size: .zero), strokeColor: currentColor, strokeWidth: drawingSize.lineThickness))
         case .crop:
             interaction = .creatingCrop(start: point, rect: CGRect(origin: point, size: .zero))
         case .select:
@@ -469,6 +506,10 @@ final class AnnotationCanvasView: NSView {
         switch interaction {
         case .idle:
             return
+        case let .panning(lastPoint):
+            let point = convert(event.locationInWindow, from: nil)
+            pan(by: CGPoint(x: point.x - lastPoint.x, y: point.y - lastPoint.y))
+            interaction = .panning(lastPoint: point)
         case let .resizing(annotation, handle, didRecordUndo):
             if !didRecordUndo {
                 state.recordUndoSnapshot()
@@ -486,9 +527,10 @@ final class AnnotationCanvasView: NSView {
             annotation.moveBy(dx: rawPoint.x - lastPoint.x, dy: rawPoint.y - lastPoint.y)
             interaction = .moving(annotation: annotation, lastPoint: rawPoint, didRecordUndo: true)
         case let .creatingAnnotation(start, annotation):
-            let rect = CGRect(x: start.x, y: start.y, width: point.x - start.x, height: point.y - start.y).normalized
+            let end = annotation is BlurAnnotation ? point : rawPoint
+            let rect = CGRect(x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y).normalized
             if let arrow = annotation as? ArrowAnnotation {
-                arrow.end = point
+                arrow.end = end
             } else {
                 annotation.bounds = rect
             }
@@ -502,7 +544,35 @@ final class AnnotationCanvasView: NSView {
     override func mouseUp(with event: NSEvent) {
         defer {
             interaction = .idle
+            window?.invalidateCursorRects(for: self)
             needsDisplay = true
+        }
+
+        if case let .panning(lastPoint) = interaction {
+            let point = convert(event.locationInWindow, from: nil)
+            pan(by: CGPoint(x: point.x - lastPoint.x, y: point.y - lastPoint.y))
+            return
+        }
+
+        if case let .creatingAnnotation(start, annotation) = interaction, let text = annotation as? TextAnnotation {
+            let end = imagePoint(for: event.locationInWindow)
+            text.bounds = CGRect(x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y).normalized
+            guard text.bounds.width * zoom > 4, text.bounds.height * zoom > 4 else { return }
+            state.addAnnotation(text, select: true)
+            beginEditing(text, isNew: true)
+            textPlacementID = text.id
+            statusHandler?("Added text annotation")
+            return
+        }
+
+        // Include the final pointer position even if no drag event arrived there.
+        if case let .creatingAnnotation(start, annotation) = interaction, !(annotation is BlurAnnotation) {
+            let end = imagePoint(for: event.locationInWindow)
+            if let arrow = annotation as? ArrowAnnotation {
+                arrow.end = end
+            } else {
+                annotation.bounds = CGRect(x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y).normalized
+            }
         }
 
         if case let .creatingAnnotation(_, annotation) = interaction,

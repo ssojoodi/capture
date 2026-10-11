@@ -85,3 +85,14 @@ Expected goal milestones:
 - `make release` reads and verifies built bundle metadata, signs and notarizes an isolated local candidate, then writes the validated DMG, checksum, and release.json to `web-page/`.
 - Keep `release.env` limited to local signing identity and notarization Keychain profile.
 - Run `make check-release` when changing release orchestration. Website deployment is separate.
+
+## Release Preparation
+
+When asked to prepare a release:
+
+1. Update `Config/Version.xcconfig`: use today's local date for the date-based app version and increment the integer build number.
+2. Add a new entry at the top of `web-page/release-notes.html`, dated today, with succinct functional bullets covering the changes since the previous release. Move the latest-update marker to this entry and update the page's description, social descriptions, and structured-data description.
+3. Include screenshots only when they help explain the changes. Reuse relevant screenshots in the release's dated folder when available; otherwise create them if justified. Preserve historical screenshots, use accurate alt text and dimensions, and optimize displayed images. Text-only release notes are acceptable.
+4. Validate the version settings, release notes, local links, and relevant tests. Commit the preparation, push the feature branch, and create a pull request against the repository's default branch with a concise summary and actual validation results.
+
+Release preparation does not itself package or deploy the app. Keep `release.json` and the DMG checksum paired with the existing binary until `make release` generates new artifacts. Signing, notarization, website deployment, and merging the pull request remain separate actions unless requested.

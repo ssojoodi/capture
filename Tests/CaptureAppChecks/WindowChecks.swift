@@ -16,6 +16,15 @@ enum WindowChecks {
         window.contentView!.subviews.compactMap { $0 as? AnnotationCanvasView }.first!
     }
 
+    static func finishTextDrag(_ canvas: AnnotationCanvasView, from start: NSPoint, size: CGSize = CGSize(width: 260, height: 100)) {
+        let end = NSPoint(x: start.x + size.width, y: start.y + size.height)
+        for type in [NSEvent.EventType.leftMouseDragged, .leftMouseUp] {
+            let event = NSEvent.mouseEvent(with: type, location: end, modifierFlags: [], timestamp: 0,
+                windowNumber: canvas.window!.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            if type == .leftMouseDragged { canvas.mouseDragged(with: event) } else { canvas.mouseUp(with: event) }
+        }
+    }
+
     static func markEdited(_ window: NSWindow) {
         let controller = window.windowController as! MainWindowController
         controller.selectTool(NSToolbarItem(itemIdentifier: .init("rectangle")))
@@ -58,6 +67,9 @@ enum WindowChecks {
                 runAboutChecks(app: app)
                 runDuplicateChecks()
                 runTextBoundsChecks()
+                runTextDragChecks()
+                runShapeDragChecks()
+                runPanChecks(app: app)
                 runInPlaceTextChecks()
                 runWindowSizingChecks()
                 runPNGOutputChecks()
@@ -148,6 +160,7 @@ enum WindowChecks {
         let location = canvas.convert(CGPoint(x: canvas.bounds.midX, y: canvas.bounds.midY), to: nil)
         canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: location, modifierFlags: [], timestamp: 0,
             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        finishTextDrag(canvas, from: location)
         let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
         editor.textView.insertText("Keep this annotation", replacementRange: NSRange(location: 0, length: 0))
         press("™", code: 19)
@@ -168,6 +181,7 @@ enum WindowChecks {
         press("†", code: 17)
         canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: location, modifierFlags: [], timestamp: 0,
             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        finishTextDrag(canvas, from: location)
         let nextEditor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
         nextEditor.textView.insertText("Option commits text", replacementRange: NSRange(location: 0, length: 0))
         press("å", code: 0)
@@ -218,6 +232,8 @@ enum WindowChecks {
             }
             canvas.mouseDown(with: mouse(.leftMouseDown, -60))
             if tool == .text {
+                canvas.mouseDragged(with: mouse(.leftMouseDragged, 60))
+                canvas.mouseUp(with: mouse(.leftMouseUp, 60))
                 let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
                 editor.textView.insertText("Size check", replacementRange: NSRange(location: 0, length: 0))
                 canvas.commitTextEditing()
@@ -288,6 +304,7 @@ enum WindowChecks {
         let center = canvas.convert(CGPoint(x: canvas.bounds.midX, y: canvas.bounds.midY), to: nil)
         canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: center, modifierFlags: [], timestamp: 0,
             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        finishTextDrag(canvas, from: center)
         let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
         editor.textView.insertText("Keep my text", replacementRange: NSRange(location: 0, length: 0))
         choose(1)
@@ -343,6 +360,7 @@ enum WindowChecks {
         let location = canvas.convert(NSPoint(x: canvas.bounds.midX, y: canvas.bounds.midY), to: nil)
         canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: location, modifierFlags: [], timestamp: 0,
             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        finishTextDrag(canvas, from: location)
         let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
         editor.textView.insertText("Copy this text", replacementRange: NSRange(location: 0, length: 0))
         precondition(controller.validateMenuItem(menuItem))
@@ -401,6 +419,203 @@ enum WindowChecks {
         first.close()
     }
 
+    static func runPanChecks(app: NSApplication) {
+        let state = AnnotationDocumentState()
+        state.load(image: NSImage(size: CGSize(width: 600, height: 400), flipped: false) { rect in
+            NSColor.white.setFill(); rect.fill(); return true
+        })
+        let text = TextAnnotation(bounds: CGRect(x: 100, y: 100, width: 200, height: 100), text: "Pan me")
+        state.addAnnotation(text, select: true)
+        state.selectedTool = .select
+        let controller = MainWindowController(state: state)
+        controller.showWindow(nil)
+        let window = controller.window!
+        window.makeKeyAndOrderFront(nil)
+        let canvas = canvas(in: window)
+        canvas.zoomToFit()
+        window.makeFirstResponder(canvas)
+        func space(_ type: NSEvent.EventType) {
+            app.sendEvent(NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, characters: " ", charactersIgnoringModifiers: " ",
+                isARepeat: false, keyCode: 49)!)
+        }
+        func mouse(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: canvas.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        let originalBounds = text.bounds
+        let revision = state.revisionID
+        let png = state.imageData()!
+        let selection = state.selectedAnnotationID
+        let initialOrigin = canvas.imageOrigin
+        space(.keyDown)
+        precondition(canvas.isSpacePanEnabled)
+        let start = CGPoint(x: canvas.bounds.midX, y: canvas.bounds.midY)
+        canvas.mouseDown(with: mouse(.leftMouseDown, start))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, CGPoint(x: start.x + 120, y: start.y - 60)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, CGPoint(x: start.x + 140, y: start.y - 80)))
+        space(.keyUp)
+        precondition(canvas.imageOrigin == CGPoint(x: initialOrigin.x + 140, y: initialOrigin.y - 80))
+        canvas.layout()
+        precondition(canvas.imageOrigin == CGPoint(x: initialOrigin.x + 140, y: initialOrigin.y - 80), "Layout must not reset a pan")
+        precondition(!canvas.isSpacePanEnabled)
+        precondition(text.bounds == originalBounds && state.revisionID == revision && state.selectedAnnotationID == selection)
+        precondition(state.imageData() == png)
+        let scroll = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 30, wheel2: -50, wheel3: 0)!
+        let scrollEvent = NSEvent(cgEvent: scroll)!
+        let beforeScroll = canvas.imageOrigin
+        canvas.scrollWheel(with: scrollEvent)
+        let multiplier: CGFloat = scrollEvent.hasPreciseScrollingDeltas ? 1 : 10
+        precondition(canvas.imageOrigin == CGPoint(x: beforeScroll.x + scrollEvent.scrollingDeltaX * multiplier,
+                                                  y: beforeScroll.y + scrollEvent.scrollingDeltaY * multiplier))
+        precondition(state.revisionID == revision && state.imageData() == png)
+        space(.keyDown)
+        controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification, object: window))
+        precondition(!canvas.isSpacePanEnabled)
+        canvas.zoomToFit()
+        precondition(canvas.imageOrigin == initialOrigin)
+        precondition(state.imageData() == png)
+        canvas.resetZoom()
+        canvas.zoomIn()
+        let zoomedOrigin = canvas.imageOrigin
+        space(.keyDown)
+        canvas.mouseDown(with: mouse(.leftMouseDown, start))
+        canvas.mouseUp(with: mouse(.leftMouseUp, CGPoint(x: start.x + 25, y: start.y + 35)))
+        space(.keyUp)
+        precondition(canvas.imageOrigin == CGPoint(x: zoomedOrigin.x + 25, y: zoomedOrigin.y + 35), "Pan must use screen points at any zoom")
+        canvas.resetZoom()
+        let textPoint = CGPoint(x: canvas.imageOrigin.x + text.bounds.midX, y: canvas.imageOrigin.y + text.bounds.midY)
+        let editEvent = NSEvent.mouseEvent(with: .leftMouseDown, location: canvas.convert(textPoint, to: nil),
+            modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 2, pressure: 1)!
+        canvas.mouseDown(with: editEvent)
+        precondition(canvas.isEditingText)
+        space(.keyDown)
+        space(.keyUp)
+        precondition(!canvas.isSpacePanEnabled)
+        let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+        precondition(editor.text == "Pan me ", "Space must remain text input while editing")
+        canvas.commitTextEditing()
+        window.close()
+        print("PASS: Space pan key routing, mouse and trackpad gestures preserve image/selection/revision, focus-loss cleanup and Fit")
+    }
+
+    static func runShapeDragChecks() {
+        for tool in [Tool.rectangle, .ellipse, .arrow] {
+            for scale: CGFloat in [1, 0.8] {
+                for pair in [(CGPoint(x: -70, y: -60), CGPoint(x: -20, y: -10)),
+                             (CGPoint(x: 150, y: 130), CGPoint(x: -40, y: -30))] {
+                    let state = AnnotationDocumentState()
+                    state.load(image: NSImage(size: CGSize(width: 100, height: 80), flipped: false) { rect in
+                        NSColor.white.setFill(); rect.fill(); return true
+                    })
+                    let controller = MainWindowController(state: state)
+                    let window = controller.window!
+                    controller.showWindow(nil)
+                    window.layoutIfNeeded()
+                    let canvas = canvas(in: window)
+                    canvas.zoomToFit()
+                    canvas.resetZoom()
+                    if scale < 1 { canvas.zoomOut() }
+                    state.selectedTool = tool
+                    canvas.toolDidChange()
+                    func event(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent {
+                        let location = canvas.convert(CGPoint(x: canvas.bounds.midX + (point.x - state.imageSize.width / 2) * scale,
+                                                             y: canvas.bounds.midY + (point.y - state.imageSize.height / 2) * scale), to: nil)
+                        return NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: 0,
+                            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                    }
+                    let revision = state.revisionID
+                    canvas.mouseDown(with: event(.leftMouseDown, pair.0))
+                    canvas.mouseDragged(with: event(.leftMouseDragged, pair.1))
+                    precondition(state.annotations.isEmpty && state.revisionID == revision)
+                    canvas.cancelInteraction()
+                    canvas.mouseUp(with: event(.leftMouseUp, pair.1))
+                    precondition(state.annotations.isEmpty)
+                    canvas.mouseDown(with: event(.leftMouseDown, pair.0))
+                    canvas.mouseUp(with: event(.leftMouseUp, pair.1))
+                    let annotation = state.annotations.first!
+                    let expected = CGRect(x: pair.0.x, y: pair.0.y, width: pair.1.x - pair.0.x, height: pair.1.y - pair.0.y).normalized
+                    precondition(abs(annotation.bounds.minX - expected.minX) < 0.001, "\(tool) at \(scale): \(annotation.bounds), expected \(expected)")
+                    precondition(abs(annotation.bounds.minY - expected.minY) < 0.001)
+                    precondition(abs(annotation.bounds.width - expected.width) < 0.001)
+                    precondition(abs(annotation.bounds.height - expected.height) < 0.001)
+                    if let arrow = annotation as? ArrowAnnotation {
+                        precondition(hypot(arrow.start.x - pair.0.x, arrow.start.y - pair.0.y) < 0.001)
+                        precondition(hypot(arrow.end.x - pair.1.x, arrow.end.y - pair.1.y) < 0.001)
+                    }
+                    let expanded = state.canvasBounds
+                    precondition(expanded.contains(annotation.renderedBounds))
+                    precondition(state.flattenedImage()!.size == expanded.size)
+                    precondition(state.undo() && state.canvasBounds == CGRect(origin: .zero, size: state.imageSize))
+                    precondition(state.redo() && state.canvasBounds == expanded)
+                    window.close()
+                }
+            }
+        }
+        print("PASS: rectangle, oval and arrow creation outside image, reverse drags, zoom, cancellation, final endpoint, export and undo/redo")
+    }
+
+    static func runTextDragChecks() {
+        for zoomOut in [false, true] {
+            for delta in [CGSize(width: 160, height: 100), CGSize(width: -160, height: 100),
+                          CGSize(width: 160, height: -100), CGSize(width: -160, height: -100)] {
+                let state = AnnotationDocumentState()
+                state.load(image: NSImage(size: NSSize(width: 100, height: 80), flipped: false) { rect in
+                    NSColor.white.setFill()
+                    rect.fill()
+                    return true
+                })
+                let controller = MainWindowController(state: state)
+                let window = controller.window!
+                controller.showWindow(nil)
+                let canvas = canvas(in: window)
+                canvas.resetZoom()
+                if zoomOut { canvas.zoomOut() }
+                let scale: CGFloat = zoomOut ? 0.8 : 1
+                state.selectedTool = .text
+                canvas.toolDidChange()
+                let start = canvas.convert(NSPoint(x: canvas.bounds.midX, y: canvas.bounds.midY), to: nil)
+                func event(_ type: NSEvent.EventType, _ point: NSPoint) -> NSEvent {
+                    NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: 0,
+                        windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                }
+                let revision = state.revisionID
+                canvas.mouseDown(with: event(.leftMouseDown, start))
+                canvas.mouseUp(with: event(.leftMouseUp, start))
+                precondition(state.annotations.isEmpty && !canvas.isEditingText && state.revisionID == revision)
+                canvas.mouseDown(with: event(.leftMouseDown, start))
+                finishTextDrag(canvas, from: start, size: CGSize(width: 3, height: 100))
+                precondition(state.annotations.isEmpty && state.revisionID == revision)
+                let end = NSPoint(x: start.x + delta.width, y: start.y + delta.height)
+                canvas.mouseDown(with: event(.leftMouseDown, start))
+                canvas.mouseDragged(with: event(.leftMouseDragged, end))
+                precondition(state.annotations.isEmpty && !canvas.isEditingText && state.revisionID == revision)
+                canvas.cancelInteraction()
+                canvas.mouseUp(with: event(.leftMouseUp, end))
+                precondition(state.annotations.isEmpty)
+                canvas.mouseDown(with: event(.leftMouseDown, start))
+                // Mouse-up must include the final position even without a final drag event.
+                canvas.mouseUp(with: event(.leftMouseUp, end))
+                let text = state.annotations.first as! TextAnnotation
+                precondition(canvas.isEditingText && state.annotations.count == 1)
+                precondition(abs(text.bounds.width - abs(delta.width) / scale) < 0.001)
+                precondition(abs(text.bounds.height - abs(delta.height) / scale) < 0.001)
+                precondition(!CGRect(origin: .zero, size: state.imageSize).contains(text.bounds))
+                let originalWidth = text.bounds.width
+                let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
+                editor.textView.insertText(String(repeating: "Wrapped text ", count: 20), replacementRange: NSRange(location: 0, length: 0))
+                canvas.commitTextEditing()
+                precondition(text.bounds.width == originalWidth && text.bounds.height > abs(delta.height) / scale)
+                let expanded = state.canvasBounds
+                precondition(state.flattenedImage()!.size == expanded.size)
+                precondition(state.undo() && state.annotations.isEmpty)
+                precondition(state.redo() && state.canvasBounds == expanded)
+                window.close()
+            }
+        }
+        print("PASS: drag-only text, tiny gestures, cancellation, four directions, zoom, expanded output, typing and undo/redo")
+    }
+
     static func runTextBoundsChecks() {
         let state = AnnotationDocumentState()
         let canvas = AnnotationCanvasView(state: state)
@@ -423,9 +638,10 @@ enum WindowChecks {
         state.selectedTool = .text
         canvas.toolDidChange()
         canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 595, y: 445)))
+        finishTextDrag(canvas, from: canvas.convert(NSPoint(x: 595, y: 445), to: nil), size: CGSize(width: 160, height: 100))
         let text = state.annotations[0] as! TextAnnotation
         let imageBounds = CGRect(origin: .zero, size: state.imageSize)
-        precondition(imageBounds.contains(text.bounds), "Edge placement must fit inside the image")
+        precondition(!imageBounds.contains(text.bounds), "Edge placement must extend beyond the image")
         let originalWidth = text.bounds.width
         let originalOrigin = text.bounds.origin
         let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
@@ -469,20 +685,20 @@ enum WindowChecks {
         precondition(state.undo() && state.annotations[0].bounds == enlarged)
         precondition(state.redo() && state.annotations[0].bounds.minX == -150)
 
-        // Creation stays bounded; resizing that same shape in Select can exceed the image.
+        // Creation and subsequent Select resizing can both exceed the image.
         state.selectedAnnotationID = nil
         state.selectedTool = .rectangle
         canvas.toolDidChange()
         canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 500, y: 350)))
         canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 680, y: 490)))
         canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 680, y: 490)))
-        precondition(state.annotations.last!.bounds == CGRect(x: 300, y: 200, width: 100, height: 100))
+        precondition(state.annotations.last!.bounds == CGRect(x: 300, y: 200, width: 180, height: 140))
         state.selectedTool = .select
         canvas.toolDidChange()
-        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 600, y: 450)))
-        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 680, y: 490)))
-        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 680, y: 490)))
-        precondition(state.annotations.last!.bounds == CGRect(x: 300, y: 200, width: 180, height: 140))
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: 680, y: 490)))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: 720, y: 530)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: 720, y: 530)))
+        precondition(state.annotations.last!.bounds == CGRect(x: 300, y: 200, width: 220, height: 180))
         let expandedOutput = state.flattenedImage()!
         precondition(expandedOutput.size == state.canvasBounds.size, "Output must include the expanded canvas")
         let outputBitmap = NSBitmapImageRep(cgImage: expandedOutput.cgImageForRendering()!)
@@ -664,6 +880,7 @@ enum WindowChecks {
         let location = canvas.convert(CGPoint(x: canvas.bounds.midX, y: canvas.bounds.midY), to: nil)
         canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: location, modifierFlags: [],
             timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        finishTextDrag(canvas, from: location)
         let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
         editor.textView.insertText("Copy only this text", replacementRange: NSRange(location: 0, length: 0))
         editor.textView.setSelectedRange(NSRange(location: 0, length: 4))
@@ -863,6 +1080,8 @@ enum WindowChecks {
         let outside = NSPoint(x: 150, y: 150)
         chooseText()
         click(origin)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: canvas.convert(origin, to: nil), modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        finishTextDrag(canvas, from: canvas.convert(origin, to: nil))
         let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
         editor.textView.insertText("Keep this text", replacementRange: NSRange(location: 0, length: 0))
         click(outside)
@@ -875,7 +1094,9 @@ enum WindowChecks {
         precondition(state.redo() && state.annotations.count == 1)
 
         chooseText()
-        click(NSPoint(x: 250, y: 340))
+        let nextPoint = canvas.convert(NSPoint(x: 250, y: 340), to: nil)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: nextPoint, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        finishTextDrag(canvas, from: nextPoint)
         precondition(state.annotations.count == 2 && canvas.isEditingText)
         // Styling commits the editor, but the next outside click must still leave Text.
         canvas.applySelectedTextBackground(NSColor.white.withAlphaComponent(0.75))
@@ -904,6 +1125,7 @@ enum WindowChecks {
                                       windowNumber: window.windowNumber, context: nil, eventNumber: 0,
                                       clickCount: 1, pressure: 1)!
         canvas.mouseDown(with: event)
+        finishTextDrag(canvas, from: location)
         let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
         precondition(!editor.drawsBackground && !editor.contentView.drawsBackground && !editor.textView.drawsBackground,
                      "Editor must not compound the canvas background opacity")
@@ -958,6 +1180,7 @@ enum WindowChecks {
         canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: newTextLocation, modifierFlags: [],
                                                 timestamp: 0, windowNumber: window.windowNumber, context: nil,
                                                 eventNumber: 0, clickCount: 1, pressure: 1)!)
+        finishTextDrag(canvas, from: newTextLocation)
         let outside = canvas.convert(NSPoint(x: canvas.bounds.midX - 250, y: canvas.bounds.midY - 150), to: nil)
         canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: outside, modifierFlags: [],
                                                 timestamp: 0, windowNumber: window.windowNumber, context: nil,
