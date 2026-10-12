@@ -1,12 +1,28 @@
 import AppKit
 
-/// Change these values together when moving the website or changing check frequency.
+/// Endpoints come from Info.plist; timing remains a code-level setting.
 struct UpdateConfiguration {
-    var manifestURL = URL(string: "https://sojoodi.com/apps/Capture/release.json")!
-    var downloadURL = URL(string: "https://sojoodi.com/apps/Capture/Capture.dmg")!
-    var releaseNotesURL = URL(string: "https://sojoodi.com/apps/Capture/release-notes.html")!
+    var manifestURL: URL?
+    var downloadURL: URL?
+    var releaseNotesURL: URL?
     var automaticCheckInterval: TimeInterval = 24 * 60 * 60
     var requestTimeout: TimeInterval = 15
+
+    var isValid: Bool { manifestURL != nil && downloadURL != nil && releaseNotesURL != nil }
+
+    static func from(info: [String: Any]) -> UpdateConfiguration {
+        func endpoint(_ key: String) -> URL? {
+            guard let value = info[key] as? String,
+                  !value.contains("$("), !value.contains(where: { $0.isWhitespace }),
+                  let url = URL(string: value), url.scheme?.lowercased() == "https",
+                  let host = url.host, !host.isEmpty,
+                  url.user == nil, url.password == nil, url.fragment == nil else { return nil }
+            return url
+        }
+        return UpdateConfiguration(manifestURL: endpoint("CaptureUpdateManifestURL"),
+                                   downloadURL: endpoint("CaptureUpdateDownloadURL"),
+                                   releaseNotesURL: endpoint("CaptureUpdateReleaseNotesURL"))
+    }
 }
 
 struct UpdateRelease: Decodable, Equatable {
@@ -66,7 +82,7 @@ final class UpdateController: NSObject, NSMenuItemValidation {
     private var messageLabel: NSTextField?
     private var buttons: NSStackView?
 
-    init(configuration: UpdateConfiguration = UpdateConfiguration(), defaults: UserDefaults = .standard,
+    init(configuration: UpdateConfiguration = .from(info: Bundle.main.infoDictionary ?? [:]), defaults: UserDefaults = .standard,
          installedVersion: String? = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
          installedBuild: String? = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
          now: @escaping () -> Date = Date.init, isActive: @escaping () -> Bool = { NSApp.isActive },
@@ -137,6 +153,10 @@ final class UpdateController: NSObject, NSMenuItemValidation {
             if manual { manualRequest = true; present(.checking) }
             return
         }
+        guard configuration.isValid else {
+            if manual { present(.failure("The update URLs are missing or invalid in this app. Please reinstall Capture.")) }
+            return
+        }
         guard installed.buildNumber != nil else {
             if manual { present(.failure(UpdateFailure.installedVersion.localizedDescription)) }
             return
@@ -147,7 +167,7 @@ final class UpdateController: NSObject, NSMenuItemValidation {
         defaults.set(now(), forKey: Key.attempt)
         timer?.invalidate(); timer = nil
         if manual { present(.checking) }
-        var request = URLRequest(url: configuration.manifestURL, cachePolicy: .reloadRevalidatingCacheData,
+        var request = URLRequest(url: configuration.manifestURL!, cachePolicy: .reloadRevalidatingCacheData,
                                  timeoutInterval: configuration.requestTimeout)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         fetch(request) { [weak self] result in
@@ -186,7 +206,7 @@ final class UpdateController: NSObject, NSMenuItemValidation {
 
     private func schedule() {
         timer?.invalidate(); timer = nil
-        guard automaticEnabled, isActive(), !isChecking, installed.buildNumber != nil else { return }
+        guard automaticEnabled, isActive(), !isChecking, configuration.isValid, installed.buildNumber != nil else { return }
         let last = defaults.object(forKey: Key.attempt) as? Date ?? now()
         let delay = max(1, configuration.automaticCheckInterval - now().timeIntervalSince(last))
         timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
@@ -202,7 +222,8 @@ final class UpdateController: NSObject, NSMenuItemValidation {
     @objc func download(_ sender: Any?) { open(configuration.downloadURL) }
     @objc func releaseNotes(_ sender: Any?) { open(configuration.releaseNotesURL) }
     @objc private func dismiss(_ sender: Any?) { panel?.orderOut(nil) }
-    private func open(_ url: URL) {
+    private func open(_ url: URL?) {
+        guard let url else { return }
         if !openURL(url) { present(.failure("Capture could not open your browser. Please try again.")) }
     }
 

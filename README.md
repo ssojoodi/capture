@@ -155,7 +155,9 @@ cp Config/LocalSigning.example.xcconfig Config/LocalSigning.xcconfig
 
 Capture → Check for Updates… checks for a newer build and offers a browser download and release notes. Installation is manual. Automatically Check for Updates is off until enabled in the Capture menu.
 
-All endpoints and timing live in `Sources/CaptureApp/UpdateController.swift`, in `UpdateConfiguration`: the manifest URL, download URL, release-notes URL, automatic-check interval (24 hours), and request timeout (15 seconds). There is no user setting for the interval. Manual checks bypass it; every network attempt, including a manual or failed attempt, postpones the next automatic check. Automatic results are shown once per new build and only while Capture is active.
+Deployment URLs live in `Config/Updates.xcconfig`. `Config/Info.plist` exposes them as `CaptureUpdateManifestURL`, `CaptureUpdateDownloadURL`, and `CaptureUpdateReleaseNotesURL`. Keep the `https:/$()/` syntax in xcconfig files so `//` does not start a comment. Xcode expands this to `https://` in the built app. Missing or invalid HTTPS URLs prevent checks; manual checks show a configuration error.
+
+Timing stays in `UpdateConfiguration` in `Sources/CaptureApp/UpdateController.swift`: the automatic-check interval (24 hours) and request timeout (15 seconds). There is no user setting for the interval. Manual checks bypass it; every network attempt, including a manual or failed attempt, postpones the next automatic check. Automatic results are shown once per new build and only while Capture is active.
 
 When moving to a new host, update these configuration values and keep the old HTTPS endpoints working or redirect them to the new HTTPS endpoints. Installed copies retain the URLs they shipped with. Existing versions without the checker require a manual upgrade to the first checker-enabled release.
 

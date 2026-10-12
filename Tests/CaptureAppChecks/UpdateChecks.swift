@@ -15,6 +15,32 @@ extension WindowChecks {
             downloadURL: URL(string: "https://downloads.example.test/App.dmg")!,
             releaseNotesURL: URL(string: "https://example.test/changes")!,
             automaticCheckInterval: 60, requestTimeout: 3)
+        let info = ["CaptureUpdateManifestURL": config.manifestURL!.absoluteString,
+                    "CaptureUpdateDownloadURL": config.downloadURL!.absoluteString,
+                    "CaptureUpdateReleaseNotesURL": config.releaseNotesURL!.absoluteString]
+        let loaded = UpdateConfiguration.from(info: info)
+        precondition(loaded.isValid && loaded.manifestURL == config.manifestURL)
+        precondition(loaded.downloadURL == config.downloadURL && loaded.releaseNotesURL == config.releaseNotesURL)
+        precondition(loaded.automaticCheckInterval == 24 * 60 * 60)
+        for key in info.keys {
+            for invalid in ["", "http://example.test/update", "relative/path", "$(UNEXPANDED)", "https://", "https://user:password@example.test/update", "https://example.test/has space"] {
+                var bad = info
+                bad[key] = invalid
+                precondition(!UpdateConfiguration.from(info: bad).isValid)
+            }
+            var missing = info
+            missing.removeValue(forKey: key)
+            precondition(!UpdateConfiguration.from(info: missing).isValid)
+        }
+        var invalidState: UpdateController.Presentation?
+        let invalidConfig = UpdateController(configuration: .from(info: [:]), defaults: defaults,
+            installedVersion: "2026.10.12", installedBuild: "5", isActive: { true },
+            fetch: { _, _ in preconditionFailure("Invalid configuration must not request an update") },
+            presentationHandler: { invalidState = $0 })
+        invalidConfig.checkForUpdates(nil)
+        guard case .failure = invalidState else { preconditionFailure("Missing URLs must show a manual error") }
+        invalidConfig.setAutomaticEnabled(true)
+        invalidConfig.setAutomaticEnabled(false)
         let fetch: UpdateController.Fetch = { request, completion in requests.append(request); callbacks.append(completion) }
         func controller(build: String? = "4") -> UpdateController {
             UpdateController(configuration: config, defaults: defaults, installedVersion: "2026.10.10", installedBuild: build,
@@ -62,7 +88,7 @@ extension WindowChecks {
         reply(manifest("3"))
         precondition(shown.last == .current)
         updater.download(nil); updater.releaseNotes(nil)
-        precondition(opened == [config.downloadURL, config.releaseNotesURL])
+        precondition(opened == [config.downloadURL!, config.releaseNotesURL!])
         updater.checkForUpdates(nil)
         reply(.success(Data("not JSON".utf8)))
         guard case .failure = shown.last! else { preconditionFailure("Malformed JSON must report an error") }
@@ -114,12 +140,12 @@ extension WindowChecks {
         updater.setAutomaticEnabled(false)
         let appMenu = AppMenu.makeMenu().items.first!.submenu!
         precondition(appMenu.items.contains { $0.action == #selector(AppDelegate.checkForUpdates(_:)) })
-        let response = HTTPURLResponse(url: config.manifestURL, statusCode: 503, httpVersion: nil, headerFields: nil)!
+        let response = HTTPURLResponse(url: config.manifestURL!, statusCode: 503, httpVersion: nil, headerFields: nil)!
         do {
             _ = try UpdateController.validateResponse(data: Data(), response: response)
             preconditionFailure("HTTP failures must not be accepted")
         } catch { }
-        let ok = HTTPURLResponse(url: config.manifestURL, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        let ok = HTTPURLResponse(url: config.manifestURL!, statusCode: 200, httpVersion: nil, headerFields: nil)!
         do {
             _ = try UpdateController.validateResponse(data: Data(count: 65 * 1024), response: ok)
             preconditionFailure("Oversized manifests must not be accepted")
