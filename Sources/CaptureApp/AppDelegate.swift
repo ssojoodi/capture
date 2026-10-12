@@ -1,13 +1,21 @@
 import AppKit
 import CaptureCore
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+    private let updates = UpdateController()
     private var windowControllers: [MainWindowController] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         newDocument(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
+
+    func applicationDidBecomeActive(_ notification: Notification) { updates.applicationDidBecomeActive() }
+    func applicationDidResignActive(_ notification: Notification) { updates.applicationDidResignActive() }
+    @objc func checkForUpdates(_ sender: Any?) { updates.checkForUpdates(sender) }
+    @objc func toggleAutomaticChecks(_ sender: Any?) { updates.toggleAutomaticChecks(sender) }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool { updates.validateMenuItem(item) }
 
     @objc func newDocument(_ sender: Any?) {
         let previousWindow = NSApp.keyWindow ?? windowControllers.last?.window

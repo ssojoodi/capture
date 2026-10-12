@@ -150,3 +150,13 @@ cp Config/LocalSigning.example.xcconfig Config/LocalSigning.xcconfig
 ```
 
 `Config/LocalSigning.xcconfig` is ignored by git. The current command-line release flow signs manually after building, so `release.env` remains the source of truth for release signing.
+
+## Update checker
+
+Capture → Check for Updates… checks for a newer build and offers a browser download and release notes. Installation is manual. Automatically Check for Updates is off until enabled in the Capture menu.
+
+All endpoints and timing live in `Sources/CaptureApp/UpdateController.swift`, in `UpdateConfiguration`: the manifest URL, download URL, release-notes URL, automatic-check interval (24 hours), and request timeout (15 seconds). There is no user setting for the interval. Manual checks bypass it; every network attempt, including a manual or failed attempt, postpones the next automatic check. Automatic results are shown once per new build and only while Capture is active.
+
+When moving to a new host, update these configuration values and keep the old HTTPS endpoints working or redirect them to the new HTTPS endpoints. Installed copies retain the URLs they shipped with. Existing versions without the checker require a manual upgrade to the first checker-enabled release.
+
+For website deployment, upload the validated DMG first, its matching checksum next, and `release.json` last. Verify the public manifest's version, build, byte count, and SHA-256 against the downloadable DMG. Publish all three from the same `make release` output; do not advertise a release before its download is available. The checker compares the manifest's integer `build` to `CFBundleVersion`; release preparation alone does not change the advertised download.
