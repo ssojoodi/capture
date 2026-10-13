@@ -151,14 +151,8 @@ cp Config/LocalSigning.example.xcconfig Config/LocalSigning.xcconfig
 
 `Config/LocalSigning.xcconfig` is ignored by git. The current command-line release flow signs manually after building, so `release.env` remains the source of truth for release signing.
 
-## Update checker
+## Updates
 
-Capture → Check for Updates… checks for a newer build and offers a browser download and release notes. Installation is manual. Automatically Check for Updates is off until enabled in the Capture menu.
+Choose Capture → Check for Updates… to check for a newer version and open its download or release notes. Install downloaded updates manually.
 
-Deployment URLs live in `Config/Updates.xcconfig`. `Config/Info.plist` exposes them as `CaptureUpdateManifestURL`, `CaptureUpdateDownloadURL`, and `CaptureUpdateReleaseNotesURL`. Keep the `https:/$()/` syntax in xcconfig files so `//` does not start a comment. Xcode expands this to `https://` in the built app. Missing or invalid HTTPS URLs prevent checks; manual checks show a configuration error.
-
-Timing stays in `UpdateConfiguration` in `Sources/CaptureApp/UpdateController.swift`: the automatic-check interval (24 hours) and request timeout (15 seconds). There is no user setting for the interval. Manual checks bypass it; every network attempt, including a manual or failed attempt, postpones the next automatic check. Automatic results are shown once per new build and only while Capture is active.
-
-When moving to a new host, update these configuration values and keep the old HTTPS endpoints working or redirect them to the new HTTPS endpoints. Installed copies retain the URLs they shipped with. Existing versions without the checker require a manual upgrade to the first checker-enabled release.
-
-For website deployment, upload the validated DMG first, its matching checksum next, and `release.json` last. Verify the public manifest's version, build, byte count, and SHA-256 against the downloadable DMG. Publish all three from the same `make release` output; do not advertise a release before its download is available. The checker compares the manifest's integer `build` to `CFBundleVersion`; release preparation alone does not change the advertised download.
+Enable Automatically Check for Updates in the Capture menu for optional daily checks. This setting is off by default.
