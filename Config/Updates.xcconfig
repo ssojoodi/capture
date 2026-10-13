@@ -1,0 +1,4 @@
+// Deployment endpoints. The empty expansion prevents // from starting a comment.
+CAPTURE_UPDATE_MANIFEST_URL = https:/$()/sojoodi.com/apps/Capture/release.json
+CAPTURE_UPDATE_DOWNLOAD_URL = https:/$()/sojoodi.com/apps/Capture/Capture.dmg
+CAPTURE_UPDATE_RELEASE_NOTES_URL = https:/$()/sojoodi.com/apps/Capture/release-notes.html

@@ -150,3 +150,9 @@ cp Config/LocalSigning.example.xcconfig Config/LocalSigning.xcconfig
 ```
 
 `Config/LocalSigning.xcconfig` is ignored by git. The current command-line release flow signs manually after building, so `release.env` remains the source of truth for release signing.
+
+## Updates
+
+Choose Capture → Check for Updates… to check for a newer version and open its download or release notes. Install downloaded updates manually.
+
+Enable Automatically Check for Updates in the Capture menu for optional daily checks. This setting is off by default.
