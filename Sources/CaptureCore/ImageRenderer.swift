@@ -1,11 +1,11 @@
 import AppKit
 
 public enum ImageRenderer {
-    public static func render(state: AnnotationDocumentState) -> NSImage? {
+    public static func render(state: AnnotationDocumentState, outputBounds: CGRect? = nil) -> NSImage? {
         guard let baseCGImage = state.baseCGImage else { return nil }
         let sourceSize = state.imageSize
         let imageBounds = CGRect(origin: .zero, size: sourceSize)
-        let crop = state.cropRect ?? state.canvasBounds
+        let crop = outputBounds ?? state.cropRect ?? state.canvasBounds
         let outputSize = crop.size
         guard outputSize.width > 0, outputSize.height > 0 else { return nil }
 

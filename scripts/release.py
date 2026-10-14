@@ -106,7 +106,8 @@ def main():
             or configured.get('MARKETING_VERSION') != version or configured.get('CURRENT_PROJECT_VERSION') != build):
         raise RuntimeError('Built app version/build must match Config/Version.xcconfig.')
     core = app / 'Contents/Frameworks/CaptureCore.framework'
-    for code in (core, app):
+    helper = app / 'Contents/Helpers/capture-mcp'
+    for code in (helper, core, app):
         run('codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', args.identity, code)
     run('codesign', '--verify', '--deep', '--strict', '--verbose=2', app)
     metadata = subprocess.run(['codesign', '-d', '--verbose=4', str(app)], capture_output=True, text=True, check=True)

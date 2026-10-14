@@ -36,6 +36,11 @@ final class AnnotationCanvasView: NSView {
     private var activeTextWasNew = false
     private var activeTextDidRecordUndo = false
     var isEditingText: Bool { activeTextEditor != nil }
+    var isAgentBusy: Bool {
+        if isEditingText { return true }
+        if case .idle = interaction { return false }
+        return true
+    }
     var statusHandler: ((String) -> Void)?
     var toolSelectionHandler: ((Tool) -> Void)?
     var droppedFileHandler: ((URL) -> Bool)?

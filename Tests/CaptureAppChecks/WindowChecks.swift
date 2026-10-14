@@ -62,6 +62,7 @@ enum WindowChecks {
         app.mainMenu = AppMenu.makeMenu()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             autoreleasepool {
+                runAgentChecks()
                 runUpdateChecks()
                 runShortcutChecks(app: app)
                 runSizeChecks()

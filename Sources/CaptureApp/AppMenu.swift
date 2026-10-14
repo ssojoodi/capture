@@ -17,6 +17,10 @@ enum AppMenu {
         appMenu.addItem(withTitle: "Check for Updates…", action: #selector(AppDelegate.checkForUpdates(_:)), keyEquivalent: "")
         appMenu.addItem(withTitle: "Automatically Check for Updates", action: #selector(AppDelegate.toggleAutomaticChecks(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Allow Agent Control", action: #selector(AppDelegate.toggleAgentControl(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Copy MCP Configuration", action: #selector(AppDelegate.copyMCPConfiguration(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Agent control off", action: #selector(AppDelegate.showAgentStatus(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit \(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
 

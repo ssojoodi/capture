@@ -156,3 +156,9 @@ cp Config/LocalSigning.example.xcconfig Config/LocalSigning.xcconfig
 Choose Capture → Check for Updates… to check for a newer version and open its download or release notes. Install downloaded updates manually.
 
 Enable Automatically Check for Updates in the Capture menu for optional daily checks. This setting is off by default.
+
+## Agent control
+
+Local MCP agents can annotate images in Capture's open windows. Choose **Capture → Allow Agent Control**, then **Copy MCP Configuration** to connect a client. Agent control is off by default, and edits can be undone normally.
+
+See [MCP setup and tools](MCP.md) for connection instructions and examples.

@@ -64,6 +64,10 @@ with tempfile.TemporaryDirectory() as temporary:
             assert len(submissions) == 1
             for symbols in ('Capture.app.dSYM', 'CaptureCore.framework.dSYM'):
                 assert any(call[0] == 'ditto' and call[2].endswith('/symbols/' + symbols) for call in calls)
+            signed = [call[-1] for call in calls if call[:2] == ('codesign', '--force')]
+            assert signed[0].endswith('/Contents/Helpers/capture-mcp')
+            assert signed[1].endswith('/Contents/Frameworks/CaptureCore.framework')
+            assert signed[2].endswith('Capture.app')
             target = repo / 'web-page/Capture.dmg'
             original = target.read_bytes()
             manifest = (target.parent / 'release.json').read_bytes()
