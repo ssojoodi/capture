@@ -152,33 +152,67 @@ final class AgentDocument {
         default: throw AgentError("invalid_kind", "Unsupported annotation kind.")
         }
         guard !p.isEmpty, Set(p.keys).isSubset(of: allowed) else { throw AgentError("invalid_properties", "Properties do not match the annotation kind.") }
-        var values = original.map { describe($0)["properties"] as! [String: Any] } ?? [:]
-        values.merge(p) { _, new in new }
-        let id = original?.id ?? UUID()
-        let color = try values["color"].map { try parseColor($0) } ?? CapturePalette.softRed
-        let stroke = try number(values, "strokeWidth", fallback: 16, range: 1...256)
-        if kind == "arrow" {
-            guard let start = values["start"], let end = values["end"] else { throw AgentError("invalid_properties", "An arrow requires start and end points.") }
-            let a = try point(start), b = try point(end)
-            guard hypot(a.x - b.x, a.y - b.y) >= 2 else { throw AgentError("invalid_bounds", "Arrow must be at least two pixels long.") }
-            return ArrowAnnotation(id: id, start: a, end: b, color: color, strokeWidth: stroke)
+        let candidate: Annotation
+        if let original {
+            candidate = original.copyAnnotation()
+        } else {
+            let required = kind == "arrow" ? ["start", "end"] : kind == "text" ? ["bounds", "text"] : ["bounds"]
+            guard required.allSatisfy({ p[$0] != nil }) else {
+                throw AgentError("invalid_properties", "Missing required annotation properties: \(required.joined(separator: ", ")).")
+            }
+            switch kind {
+            case "arrow": candidate = ArrowAnnotation(start: .zero, end: .zero, strokeWidth: 16)
+            case "rectangle": candidate = RectangleAnnotation(bounds: .zero, strokeWidth: 16)
+            case "ellipse": candidate = EllipseAnnotation(bounds: .zero, strokeWidth: 16)
+            default: candidate = TextAnnotation(bounds: .zero, fontSize: 52)
+            }
         }
-        guard let raw = values["bounds"] else { throw AgentError("invalid_properties", "Annotation requires bounds.") }
-        var bounds = try rectangle(raw)
-        if kind == "rectangle" { return RectangleAnnotation(id: id, bounds: bounds, strokeColor: color, strokeWidth: stroke) }
-        if kind == "ellipse" { return EllipseAnnotation(id: id, bounds: bounds, strokeColor: color, strokeWidth: stroke) }
-        guard let text = values["text"] as? String, !text.isEmpty, text.count <= 10000, bounds.width >= 24 else { throw AgentError("invalid_text", "Text must contain 1–10000 characters and the box must be at least 24 pixels wide.") }
-        let fontSize = try number(values, "fontSize", fallback: 52, range: 6...256)
-        let background = try values["backgroundColor"].map { try parseColor($0) } ?? NSColor.black.withAlphaComponent(0.5)
-        let font = NSFont.boldSystemFont(ofSize: fontSize)
-        let storage = NSTextStorage(string: text, attributes: TextAnnotationLayout.attributes(font: font, color: color))
-        let manager = NSLayoutManager(); let container = NSTextContainer()
-        TextAnnotationLayout.configure(container, width: bounds.width)
-        manager.addTextContainer(container); storage.addLayoutManager(manager)
-        let height = ceil(TextAnnotationLayout.contentHeight(manager: manager, container: container, font: font) + TextAnnotationLayout.verticalInset * 2)
-        let top = bounds.maxY; bounds.size.height = max(bounds.height, height); bounds.origin.y = top - bounds.height
-        return TextAnnotation(id: id, bounds: bounds, text: text, fontSize: fontSize, textColor: color, backgroundColor: background, drawsBackground: background.alphaComponent > 0)
+        if let bounds = p["bounds"] { candidate.bounds = try rectangle(bounds) }
+        let color = try p["color"].map { try parseColor($0) }
+        let stroke = try p["strokeWidth"].map { _ in try number(p, "strokeWidth", fallback: 16, range: 1...256) }
+        switch candidate {
+        case let arrow as ArrowAnnotation:
+            if let start = p["start"] { arrow.start = try point(start) }
+            if let end = p["end"] { arrow.end = try point(end) }
+            if let color { arrow.color = color }
+            if let stroke { arrow.strokeWidth = stroke }
+            guard hypot(arrow.start.x - arrow.end.x, arrow.start.y - arrow.end.y) >= 2 else {
+                throw AgentError("invalid_bounds", "Arrow must be at least two pixels long.")
+            }
+        case let rectangle as RectangleAnnotation:
+            if let color { rectangle.strokeColor = color }
+            if let stroke { rectangle.strokeWidth = stroke }
+        case let ellipse as EllipseAnnotation:
+            if let color { ellipse.strokeColor = color }
+            if let stroke { ellipse.strokeWidth = stroke }
+        case let text as TextAnnotation:
+            if let value = p["text"] as? String { text.text = value }
+            if p["fontSize"] != nil { text.fontSize = try number(p, "fontSize", fallback: 52, range: 6...256) }
+            if let color { text.textColor = color }
+            if let background = p["backgroundColor"] {
+                text.backgroundColor = try parseColor(background)
+                text.drawsBackground = text.backgroundColor.alphaComponent > 0
+            }
+            guard !text.text.isEmpty, text.text.count <= 10000, text.bounds.width >= 24 else {
+                throw AgentError("invalid_text", "Text must contain 1–10000 characters and the box must be at least 24 pixels wide.")
+            }
+            let previous = original as? TextAnnotation
+            if previous == nil || previous?.text != text.text || previous?.fontSize != text.fontSize || previous?.bounds.size != text.bounds.size {
+                let font = NSFont.boldSystemFont(ofSize: text.fontSize)
+                let storage = NSTextStorage(string: text.text, attributes: TextAnnotationLayout.attributes(font: font, color: text.textColor))
+                let manager = NSLayoutManager(); let container = NSTextContainer()
+                TextAnnotationLayout.configure(container, width: text.bounds.width)
+                manager.addTextContainer(container); storage.addLayoutManager(manager)
+                let height = ceil(TextAnnotationLayout.contentHeight(manager: manager, container: container, font: font) + TextAnnotationLayout.verticalInset * 2)
+                let top = text.bounds.maxY
+                text.bounds.size.height = max(text.bounds.height, height)
+                text.bounds.origin.y = top - text.bounds.height
+            }
+        default: throw AgentError("invalid_kind", "Unsupported annotation kind.")
+        }
+        return candidate
     }
+
     private func number(_ args: [String: Any], _ key: String, fallback: CGFloat, range: ClosedRange<CGFloat>) throws -> CGFloat {
         let value = (args[key] as? NSNumber).map { CGFloat($0.doubleValue) } ?? fallback
         guard value.isFinite, range.contains(value) else { throw AgentError("invalid_arguments", "\(key) must be in \(range).") }
@@ -212,11 +246,10 @@ final class AgentDocument {
         let bounds = state.canvasBounds
         let scale = min(1, 1600 / max(bounds.width, bounds.height))
         let width = max(1, Int((bounds.width * scale).rounded())), height = max(1, Int((bounds.height * scale).rounded()))
-        guard let full = state.flattenedImage()?.cgImageForRendering(),
-              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw AgentError("render_failed", "Could not render preview.") }
-        context.interpolationQuality = .high; context.draw(full, in: CGRect(x: 0, y: 0, width: width, height: height))
-        guard let cg = context.makeImage(), let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:]) else { throw AgentError("render_failed", "Could not encode preview.") }
+        guard let cg = ImageRenderer.render(state: state, outputSize: CGSize(width: width, height: height))?.cgImageForRendering(),
+              let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:]) else {
+            throw AgentError("render_failed", "Could not render preview.")
+        }
         var result = summary(busy: false)
         result["preview"] = ["width": width, "height": height, "originX": bounds.minX,
             "originY": state.imageSize.height - bounds.maxY, "imagePixelsPerPreviewPixelX": bounds.width / CGFloat(width), "imagePixelsPerPreviewPixelY": bounds.height / CGFloat(height)]

@@ -1,7 +1,8 @@
 import Foundation
 
 public enum AgentTools {
-    public static var definitions: [[String: Any]] {
+    // Immutable JSON schemas, shared by concurrent helper and app requests.
+    nonisolated(unsafe) public static let definitions: [[String: Any]] = {
         let string: [String: Any] = ["type": "string"]
         let number: [String: Any] = ["type": "number"]
         let point: [String: Any] = object(["x": number, "y": number], required: ["x", "y"])
@@ -29,7 +30,7 @@ public enum AgentTools {
             tool("export_image", "Export a flattened PNG or JPEG to an absolute local path. Extension selects format. overwrite defaults false. Does not change the document's source file or saved state.", revision.merging(["path": string, "overwrite": ["type": "boolean"]]) { _, v in v }, ["documentID", "revision", "path"]),
             tool("copy_image", "Copy the full flattened PNG to the system clipboard; does not read the clipboard.", revision, ["documentID", "revision"])
         ]
-    }
+    }()
     private static func object(_ properties: [String: Any], required: [String]) -> [String: Any] {
         ["type": "object", "properties": properties, "required": required, "additionalProperties": false]
     }

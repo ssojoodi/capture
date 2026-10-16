@@ -74,6 +74,9 @@ with tempfile.TemporaryDirectory(prefix='capture-mcp-check-') as tmp:
         assert client.rpc('ping', {}) == {}
         names = {t['name'] for t in client.rpc('tools/list', {})['tools']}
         assert len(names) == 13 and {'blur_region', 'preview_document', 'copy_image'} <= names
+        client.tool('open_image', {'path': 42}, error='invalid_arguments')
+        client.tool('list_documents', {'unexpected': True}, error='invalid_arguments')
+        client.tool('unknown_tool', {}, error='unknown_tool')
         first, _ = client.tool('open_image', {'path': str(folder / 'input.png')})
         second, _ = client.tool('open_image', {'path': str(folder / 'input.png')})
         doc = first['documentID']

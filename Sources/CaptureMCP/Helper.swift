@@ -53,7 +53,6 @@ struct CaptureMCP {
             await server.withMethodHandler(CallTool.self) { params in
                 do {
                     let arguments = try JSONSerialization.jsonObject(with: JSONEncoder().encode(params.arguments ?? [:])) as! [String: Any]
-                    try AgentTools.validate(params.name, arguments: arguments)
                     var result = try await connection.call(method: params.name, arguments: arguments)
                     let png = result.removeValue(forKey: "imagePNG") as? String
                     let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
