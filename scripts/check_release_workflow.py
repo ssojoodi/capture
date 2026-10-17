@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Check release orchestration without signing credentials or Apple submissions."""
+# Test release build, signing, notarization, validation, and failure handling with simulated commands.
+# Run by make check-release, or directly with python3 scripts/check_release_workflow.py.
+# Requires no signing credentials and submits nothing to Apple. Not packaged with Capture.
+
 import io
 import json
 import os

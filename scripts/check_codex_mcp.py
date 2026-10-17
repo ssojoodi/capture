@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Optional local Codex handshake check. No model call, credentials, or user config changes."""
+# Check that installed Codex can initialize Capture and discover all 13 MCP tools.
+# Run manually after building: python3 scripts/check_codex_mcp.py <path-to-capture-mcp>.
+# Requires Codex on PATH. Uses temporary configuration; makes no model calls or changes to user configuration.
+# Optional development check only; not packaged with Capture.
+
 import json
 import os
 from pathlib import Path

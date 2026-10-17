@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Client-neutral JSON-RPC integration checks against the bundled MCP helper and live app fixture."""
+# Test MCP discovery, editing, previews, exports, validation, and connection lifecycle.
+# Called by check_mcp.sh with paths to the built helper and isolated test app.
+# Uses temporary files and separate app preferences. Development check only; not packaged with Capture.
+
 import base64
 import json
 import os

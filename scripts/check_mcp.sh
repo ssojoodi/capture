@@ -1,4 +1,8 @@
 #!/bin/bash
+# Compile an isolated test app and run check_mcp.py against the bundled MCP helper.
+# Run manually with bash scripts/check_mcp.sh after an Xcode Debug build in .build/DerivedData.
+# Development check only; not packaged with Capture. Run separately from check_windows.sh to avoid focus conflicts.
+
 set -euo pipefail
 cd "$(dirname "$0")/.."
 products="$PWD/.build/DerivedData/Build/Products/Debug"

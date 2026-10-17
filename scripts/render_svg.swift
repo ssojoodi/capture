@@ -1,4 +1,8 @@
 #!/usr/bin/env swift
+// Render an SVG to a PNG at the requested dimensions using WebKit.
+// The Makefile uses this during asset generation for the logo and app icon.
+// Usage: swift scripts/render_svg.swift <input-svg> <output-png> <width> <height>.
+// Asset-generation tool only; generated assets may ship, but this script does not.
 
 import AppKit
 import Foundation

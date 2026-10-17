@@ -1,4 +1,8 @@
 #!/bin/bash
+# Build the MCP helper and copy it into Capture.app/Contents/Helpers.
+# Xcode runs this build phase for Debug and Release, using CONFIGURATION and ARCHS.
+# The compiled helper ships with Capture; this build script does not.
+
 set -euo pipefail
 cd "${SRCROOT:-$(dirname "$0")/..}"
 configuration=$(echo "${CONFIGURATION:-Debug}" | tr '[:upper:]' '[:lower:]')

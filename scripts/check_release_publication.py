@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Check release replacement and backup behavior without signing credentials."""
+# Test local DMG, checksum, and manifest replacement, including backup behavior.
+# Run by make check-release, or directly with python3 scripts/check_release_publication.py.
+# Uses temporary files without signing credentials or real release changes. Not packaged with Capture.
+
 import hashlib
 import json
 from pathlib import Path

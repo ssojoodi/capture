@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Local Developer ID release. Never uploads a website or changes signing setup."""
+# Build, sign, notarize, and validate a release, then write its DMG, checksum, and manifest to web-page.
+# Run through make release with signing identity and notarization profile configured in release.env.
+# Reads the version from Config/Version.xcconfig; backs up replaced local release files.
+# Release tool only; does not deploy the website or ship with Capture.
+
 import argparse
 import datetime
 import hashlib

@@ -1,4 +1,9 @@
 #!/bin/bash
+# Check that the app, framework, and MCP helper contain matching Intel and Apple silicon architectures.
+# Also check the bundle identifier and app icon. Called by release.py before release signing.
+# Run manually with bash scripts/verify_release.sh <path-to-Capture.app> after a universal Release build.
+# Build check only; does not verify notarization and is not packaged with Capture.
+
 set -euo pipefail
 app="${1:?Pass the built Capture.app path}"
 app_archs=$(xcrun lipo -archs "$app/Contents/MacOS/Capture")
