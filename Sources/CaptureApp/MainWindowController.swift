@@ -1,8 +1,12 @@
 import AppKit
 import CaptureCore
 import UniformTypeIdentifiers
+#if canImport(CaptureAutomation)
+import CaptureAutomation
+#endif
 
 final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSMenuDelegate, NSMenuItemValidation {
+    let agentDocument: AgentDocument
     private let state: AnnotationDocumentState
     private let canvasView: AnnotationCanvasView
     private let statusLabel = NSTextField(labelWithString: "Open, paste, or drop an image to start")
@@ -82,6 +86,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     init(state: AnnotationDocumentState = AnnotationDocumentState(), screen: NSScreen? = NSScreen.main) {
         self.state = state
+        agentDocument = AgentDocument(state: state)
         canvasView = AnnotationCanvasView(state: state)
         let window = NSWindow(
             contentRect: NSRect(x: 100, y: 100, width: 1120, height: 780),
@@ -117,9 +122,21 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         canvasView.droppedImageHandler = { [weak self] image in self?.replaceWithImage(image, sourceURL: nil, message: "Dropped image") ?? false }
         state.selectionDidChange = { [weak self] in self?.updateSizeControl() }
         state.revisionDidChange = { [weak self] _ in
+            self?.agentDocument.didChange()
             self?.updateDocumentPresentation()
             self?.updateSizeControl()
         }
+    }
+
+    var agentBusy: Bool { canvasView.isAgentBusy || window?.attachedSheet != nil || NSApp.modalWindow != nil }
+    func agentLoad(_ image: NSImage, url: URL) { load(image: image, sourceURL: url, message: "Agent opened \(url.lastPathComponent)") }
+    func agentPerform(_ method: String, arguments: [String: Any]) throws -> [String: Any] {
+        guard !agentBusy else { throw AgentError("document_busy", "Finish the active text edit, drag or dialog, then inspect again.") }
+        let result = try agentDocument.perform(method, arguments)
+        canvasView.needsDisplay = true
+        updateDocumentPresentation(); updateSizeControl(); updateToolButtons()
+        if !["inspect_document", "preview_document"].contains(method) { statusLabel.stringValue = "Agent: " + method.replacingOccurrences(of: "_", with: " ") }
+        return result
     }
 
     required init?(coder: NSCoder) { nil }

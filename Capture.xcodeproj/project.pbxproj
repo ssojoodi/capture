@@ -26,6 +26,10 @@
 		A0010010010010010010010D /* CaptureCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A00200100100100100100106 /* CaptureCore.framework */; };
 		A00100100100100100100113 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200100100100100100113 /* AppDelegate.swift */; };
 		A00100100100100100100115 /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200100100100100100115; };
+        A00100100100100100100118 /* AgentDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200100100100100100118; };
+        A00100100100100100100119 /* AgentServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200100100100100100119; };
+        A0010010010010010010011A /* AgentWire.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020010010010010010011A; };
+        A0010010010010010010011B /* AgentTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020010010010010010011B; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -61,6 +65,10 @@
 		A00200100100100100100115 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
         A00200100100100100100116 /* Updates.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Updates.xcconfig; sourceTree = "<group>"; };
         A00200100100100100100117 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Config/Info.plist; sourceTree = "<group>"; };
+        A00200100100100100100118 /* AgentDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CaptureApp/AgentDocument.swift; sourceTree = SOURCE_ROOT; };
+        A00200100100100100100119 /* AgentServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CaptureApp/AgentServer.swift; sourceTree = SOURCE_ROOT; };
+        A0020010010010010010011A /* AgentWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CaptureAutomation/AgentWire.swift; sourceTree = SOURCE_ROOT; };
+        A0020010010010010010011B /* AgentTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/CaptureAutomation/AgentTools.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,7 +78,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A00800100100100100100101 = {isa = PBXGroup; children = (A00200100100100100100114 /* Version.xcconfig */, A00200100100100100100116 /* Updates.xcconfig */, A00200100100100100100117 /* Info.plist */, A00800100100100100100102 /* Sources */, A00800100100100100100105 /* Tests */, A00800100100100100100106 /* Products */, ); sourceTree = "<group>"; };
+		A00800100100100100100101 = {isa = PBXGroup; children = (A0020010010010010010011A, A0020010010010010010011B, A00200100100100100100119, A00200100100100100100118, A00200100100100100100114 /* Version.xcconfig */, A00200100100100100100116 /* Updates.xcconfig */, A00200100100100100100117 /* Info.plist */, A00800100100100100100102 /* Sources */, A00800100100100100100105 /* Tests */, A00800100100100100100106 /* Products */, ); sourceTree = "<group>"; };
 		A00800100100100100100102 /* Sources */ = {isa = PBXGroup; children = (A00800100100100100100103 /* CaptureCore */, A00800100100100100100104 /* CaptureApp */, ); path = Sources; sourceTree = "<group>"; };
 		A00800100100100100100103 /* CaptureCore */ = {isa = PBXGroup; children = (A00200100100100100100101 /* Tool.swift */, A00200100100100100100102 /* Geometry.swift */, A0020010010010010010010E /* CapturePalette.swift */, A0020010010010010010010F /* SelectionGeometry.swift */, A00200100100100100100110 /* BlurRenderer.swift */, A00200100100100100100103 /* Annotation.swift */, A00200100100100100100104 /* AnnotationDocumentState.swift */, A00200100100100100100105 /* ImageRenderer.swift */, ); path = CaptureCore; sourceTree = "<group>"; };
 		A00800100100100100100104 /* CaptureApp */ = {isa = PBXGroup; children = (A00200100100100100100113 /* AppDelegate.swift */, A00200100100100100100108 /* main.swift */, A00200100100100100100109 /* AppMenu.swift */, A00200100100100100100115 /* UpdateController.swift */, A0020010010010010010010A /* MainWindowController.swift */, A0020010010010010010010B /* AnnotationCanvasView.swift */, A00200100100100100100112 /* TextAnnotationEditorView.swift */, A00200100100100100100111 /* Assets.xcassets */, ); path = CaptureApp; sourceTree = "<group>"; };
@@ -80,7 +88,7 @@
 
 /* Begin PBXNativeTarget section */
 		A00500100100100100100101 /* CaptureCore */ = {isa = PBXNativeTarget; buildConfigurationList = A00900100100100100100101 /* Build configuration list for PBXNativeTarget "CaptureCore" */; buildPhases = (A01000100100100100100101 /* Sources */, A00700100100100100100101 /* Frameworks */, ); buildRules = (); dependencies = (); name = CaptureCore; productName = CaptureCore; productReference = A00200100100100100100106 /* CaptureCore.framework */; productType = "com.apple.product-type.framework"; };
-		A00500100100100100100102 /* Capture */ = {isa = PBXNativeTarget; buildConfigurationList = A00900100100100100100102 /* Build configuration list for PBXNativeTarget "Capture" */; buildPhases = (A01000100100100100100102 /* Sources */, A00700100100100100100102 /* Frameworks */, A01300100100100100100101 /* Resources */, A00600100100100100100101 /* Embed Frameworks */, ); buildRules = (); dependencies = (A01100100100100100100101 /* PBXTargetDependency */, ); name = Capture; productName = Capture; productReference = A00200100100100100100107 /* Capture.app */; productType = "com.apple.product-type.application"; };
+		A00500100100100100100102 /* Capture */ = {isa = PBXNativeTarget; buildConfigurationList = A00900100100100100100102 /* Build configuration list for PBXNativeTarget "Capture" */; buildPhases = (A01000100100100100100102 /* Sources */, A00700100100100100100102 /* Frameworks */, A01300100100100100100101 /* Resources */, A00600100100100100100101 /* Embed Frameworks */, A01400100100100100100101 /* Build MCP helper */, ); buildRules = (); dependencies = (A01100100100100100100101 /* PBXTargetDependency */, ); name = Capture; productName = Capture; productReference = A00200100100100100100107 /* Capture.app */; productType = "com.apple.product-type.application"; };
 		A00500100100100100100103 /* CaptureCoreTests */ = {isa = PBXNativeTarget; buildConfigurationList = A00900100100100100100103 /* Build configuration list for PBXNativeTarget "CaptureCoreTests" */; buildPhases = (A01000100100100100100103 /* Sources */, A00700100100100100100103 /* Frameworks */, ); buildRules = (); dependencies = (A01100100100100100100102 /* PBXTargetDependency */, ); name = CaptureCoreTests; productName = CaptureCoreTests; productReference = A0020010010010010010010D /* CaptureCoreTests.xctest */; productType = "com.apple.product-type.bundle.unit-test"; };
 /* End PBXNativeTarget section */
 
@@ -92,9 +100,13 @@
 		A01300100100100100100101 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A00100100100100100100111 /* Assets.xcassets in Resources */, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+        A01400100100100100100101 /* Build MCP helper */ = {isa = PBXShellScriptBuildPhase; alwaysOutOfDate = 1; buildActionMask = 2147483647; files = (); inputPaths = (); outputPaths = (); runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/bash; shellScript = "bash \"$SRCROOT/scripts/build_mcp.sh\""; };
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		A01000100100100100100101 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100100100100100100101 /* Tool.swift in Sources */, A00100100100100100100102 /* Geometry.swift in Sources */, A0010010010010010010010E /* CapturePalette.swift in Sources */, A0010010010010010010010F /* SelectionGeometry.swift in Sources */, A00100100100100100100110 /* BlurRenderer.swift in Sources */, A00100100100100100100103 /* Annotation.swift in Sources */, A00100100100100100100104 /* AnnotationDocumentState.swift in Sources */, A00100100100100100100105 /* ImageRenderer.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
-		A01000100100100100100102 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100100100100100100113 /* AppDelegate.swift in Sources */, A00100100100100100100108 /* main.swift in Sources */, A00100100100100100100109 /* AppMenu.swift in Sources */, A00100100100100100100115 /* UpdateController.swift in Sources */, A0010010010010010010010A /* MainWindowController.swift in Sources */, A0010010010010010010010B /* AnnotationCanvasView.swift in Sources */, A00100100100100100100112 /* TextAnnotationEditorView.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+		A01000100100100100100102 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100100100100100100119, A0010010010010010010011A, A0010010010010010010011B, A00100100100100100100118, A00100100100100100100113 /* AppDelegate.swift in Sources */, A00100100100100100100108 /* main.swift in Sources */, A00100100100100100100109 /* AppMenu.swift in Sources */, A00100100100100100100115 /* UpdateController.swift in Sources */, A0010010010010010010010A /* MainWindowController.swift in Sources */, A0010010010010010010010B /* AnnotationCanvasView.swift in Sources */, A00100100100100100100112 /* TextAnnotationEditorView.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
 		A01000100100100100100103 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A0010010010010010010010C /* AnnotationCoreTests.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 

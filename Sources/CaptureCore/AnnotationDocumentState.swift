@@ -222,12 +222,9 @@ extension AnnotationDocumentState {
         let imageBounds = CGRect(origin: .zero, size: imageSize)
         let clamped = rect.normalized.clamped(to: imageBounds)
         guard !clamped.isNull, !clamped.isEmpty else { return }
+        guard let croppedImage = ImageRenderer.render(state: self, outputBounds: clamped),
+              let croppedCGImage = croppedImage.cgImageForRendering() else { return }
         recordUndoSnapshot()
-        cropRect = clamped
-        guard let croppedImage = flattenedImage(), let croppedCGImage = croppedImage.cgImageForRendering() else {
-            cropRect = nil
-            return
-        }
         baseImage = croppedImage
         baseCGImage = croppedCGImage
         imageSize = CGSize(width: croppedCGImage.width, height: croppedCGImage.height)

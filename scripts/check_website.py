@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Validate public page metadata, structured data, fragments and local assets."""
+# Validate public-page metadata, structured data, fragment links, and local image assets.
+# Run python3 scripts/check_website.py after website edits and before deployment.
+# Checks local web-page files, not live HTTP responses. Development check only; not packaged with Capture.
+
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit, unquote

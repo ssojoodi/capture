@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Create the installer DMG with Capture.app, an Applications link, and a Finder background/layout.
+# Called by release.py during make release, before the DMG is signed and notarized.
+# Arguments: app path, output DMG path, volume name, background PNG path, and work directory.
+# Packaging tool only; the script is not included in the DMG or installed app.
+
 set -euo pipefail
 
 if [ "$#" -ne 5 ]; then

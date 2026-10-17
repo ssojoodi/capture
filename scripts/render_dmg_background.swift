@@ -1,4 +1,8 @@
 #!/usr/bin/env swift
+// Draw the installer background artwork and save it as a PNG.
+// The Makefile runs this during asset generation, including builds and release preparation.
+// Usage: swift scripts/render_dmg_background.swift <output-png>.
+// The generated image is used in the DMG; this script is not packaged.
 
 import AppKit
 import Foundation

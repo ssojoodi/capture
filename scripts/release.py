@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Local Developer ID release. Never uploads a website or changes signing setup."""
+# Build, sign, notarize, and validate a release, then write its DMG, checksum, and manifest to web-page.
+# Run through make release with signing identity and notarization profile configured in release.env.
+# Reads the version from Config/Version.xcconfig; backs up replaced local release files.
+# Release tool only; does not deploy the website or ship with Capture.
+
 import argparse
 import datetime
 import hashlib
@@ -106,7 +110,8 @@ def main():
             or configured.get('MARKETING_VERSION') != version or configured.get('CURRENT_PROJECT_VERSION') != build):
         raise RuntimeError('Built app version/build must match Config/Version.xcconfig.')
     core = app / 'Contents/Frameworks/CaptureCore.framework'
-    for code in (core, app):
+    helper = app / 'Contents/Helpers/capture-mcp'
+    for code in (helper, core, app):
         run('codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', args.identity, code)
     run('codesign', '--verify', '--deep', '--strict', '--verbose=2', app)
     metadata = subprocess.run(['codesign', '-d', '--verbose=4', str(app)], capture_output=True, text=True, check=True)

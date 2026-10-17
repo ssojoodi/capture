@@ -1,13 +1,13 @@
 import AppKit
 
 public enum ImageRenderer {
-    public static func render(state: AnnotationDocumentState) -> NSImage? {
+    public static func render(state: AnnotationDocumentState, outputBounds: CGRect? = nil, outputSize: CGSize? = nil) -> NSImage? {
         guard let baseCGImage = state.baseCGImage else { return nil }
         let sourceSize = state.imageSize
         let imageBounds = CGRect(origin: .zero, size: sourceSize)
-        let crop = state.cropRect ?? state.canvasBounds
-        let outputSize = crop.size
-        guard outputSize.width > 0, outputSize.height > 0 else { return nil }
+        let crop = outputBounds ?? state.cropRect ?? state.canvasBounds
+        let outputSize = outputSize ?? crop.size
+        guard crop.width > 0, crop.height > 0, outputSize.width > 0, outputSize.height > 0 else { return nil }
 
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         guard let context = CGContext(
@@ -21,6 +21,7 @@ public enum ImageRenderer {
         ) else { return nil }
 
         context.interpolationQuality = .high
+        context.scaleBy(x: outputSize.width / crop.width, y: outputSize.height / crop.height)
         context.translateBy(x: -crop.origin.x, y: -crop.origin.y)
         context.draw(baseCGImage, in: imageBounds)
         for annotation in state.annotations where annotation is BlurAnnotation {
