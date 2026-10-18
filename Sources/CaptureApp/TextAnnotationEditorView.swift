@@ -7,6 +7,7 @@ final class TextAnnotationEditorView: NSScrollView, NSTextViewDelegate {
     var onTextChanged: ((String, CGSize) -> Void)?
     var onEditingEnded: ((String, CGSize) -> Void)?
 
+    private let textUndoManager = UndoManager()
     private var minimumContentSize: CGSize
     private var maximumContentSize: CGSize
     private var scale: CGFloat
@@ -98,6 +99,34 @@ final class TextAnnotationEditorView: NSScrollView, NSTextViewDelegate {
         if !hasOverflow { contentView.scroll(to: .zero) }
         reflectScrolledClipView(contentView)
         return size
+    }
+
+    // Keep text undo separate from document edits until this editor is committed.
+    func undoManager(for view: NSTextView) -> UndoManager? { textUndoManager }
+
+    func handleKeyDown(_ event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        let key = event.charactersIgnoringModifiers?.lowercased()
+        if modifiers == .command {
+            switch key {
+            case "a": textView.selectAll(nil); return
+            case "x": textView.cut(nil); return
+            case "c": textView.copy(nil); return
+            case "v": textView.paste(nil); return
+            case "z":
+                textView.breakUndoCoalescing()
+                if textUndoManager.canUndo { textUndoManager.undo() }
+                return
+            default: break
+            }
+        } else if modifiers == [.command, .shift], key == "z" {
+            textView.breakUndoCoalescing()
+            if textUndoManager.canRedo { textUndoManager.redo() }
+            return
+        }
+        // Go directly to the text input system, before menu key equivalents.
+        // This retains native word/line movement, selection, dead keys and IME input.
+        textView.keyDown(with: event)
     }
 
     func textDidChange(_ notification: Notification) {
