@@ -1,8 +1,8 @@
 {
-  "version": "2026.10.14",
-  "build": "6",
+  "version": "2026.10.17",
+  "build": "7",
   "file": "Capture.dmg",
-  "sha256": "ad8c8e531ea1f06f4cc16b00655dcbccfd6e49c19a4369eeb456905c059a51d9",
-  "bytes": 3796554,
-  "prepared": "2026-10-15T13:22:28.035461+00:00"
+  "sha256": "909692a72fb1bc7300f10b51ba2482d6ba996fcc3ea6a69d40a3e1d8c45bc52a",
+  "bytes": 3800305,
+  "prepared": "2026-10-18T02:22:47.038413+00:00"
 }

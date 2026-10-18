@@ -64,6 +64,7 @@ enum WindowChecks {
             autoreleasepool {
                 runAgentChecks()
                 runUpdateChecks()
+                runTextKeyboardChecks(app: app)
                 runShortcutChecks(app: app)
                 runSizeChecks()
                 runAboutChecks(app: app)
@@ -90,6 +91,133 @@ enum WindowChecks {
             exit(0)
         }
         app.run()
+    }
+
+    static func runTextKeyboardChecks(app: NSApplication) {
+        let state = AnnotationDocumentState()
+        let controller = MainWindowController(state: state)
+        let window = controller.window!
+        controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+        let canvas = canvas(in: window)
+        precondition(canvas.droppedImageHandler!(NSImage(size: NSSize(width: 800, height: 600))))
+        controller.selectTool(NSToolbarItem(itemIdentifier: .init("text")))
+        let origin = canvas.convert(CGPoint(x: 250, y: 250), to: nil)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: origin, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        finishTextDrag(canvas, from: origin, size: CGSize(width: 420, height: 120))
+        let editor = canvas.focusedTextEditor!
+        let text = editor.textView
+        func press(_ characters: String, code: UInt16 = 0, modifiers: NSEvent.ModifierFlags = []) {
+            app.sendEvent(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, characters: characters,
+                charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!)
+        }
+        app.sendEvent(NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: .option, timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 58)!)
+        precondition(window.toolbar!.items.compactMap { $0.view as? ShortcutToolButton }.allSatisfy { !$0.showsShortcut })
+        text.string = "one two three"
+        text.setSelectedRange(NSRange(location: 13, length: 0))
+        press("\u{f702}", code: 123, modifiers: .option)
+        precondition(text.selectedRange() == NSRange(location: 8, length: 0), "Option-Left must move by word")
+        press("\u{f702}", code: 123, modifiers: [.option, .shift])
+        precondition(text.selectedRange() == NSRange(location: 4, length: 4), "Option-Shift-Left must extend word selection")
+        press("\u{f703}", code: 124, modifiers: [.option, .shift])
+        precondition(text.selectedRange().length < 4 && NSMaxRange(text.selectedRange()) <= 8, "Reverse selection must shrink using native word boundaries")
+        press("\u{f703}", code: 124, modifiers: .option)
+        precondition(text.selectedRange() == NSRange(location: 13, length: 0))
+        text.setSelectedRange(NSRange(location: 0, length: 0))
+        press("\u{f703}", code: 124, modifiers: [.option, .shift])
+        precondition(text.selectedRange() == NSRange(location: 0, length: 3))
+        press("a", modifiers: .command)
+        precondition(text.selectedRange() == NSRange(location: 0, length: 13))
+        let clipboard = NSPasteboard.general
+        let savedItems = (clipboard.pasteboardItems ?? []).map { item -> NSPasteboardItem in
+            let copy = NSPasteboardItem()
+            for type in item.types { if let data = item.data(forType: type) { copy.setData(data, forType: type) } }
+            return copy
+        }
+        defer { clipboard.clearContents(); clipboard.writeObjects(savedItems) }
+        press("c", modifiers: .command)
+        precondition(clipboard.string(forType: .string) == "one two three")
+        press("x", modifiers: .command)
+        precondition(text.string.isEmpty && canvas.isEditingText)
+        press("v", modifiers: .command)
+        precondition(text.string == "one two three" && canvas.isEditingText)
+        // Start the replacement-typing check from a fresh fixture undo history.
+        text.breakUndoCoalescing()
+        text.undoManager?.removeAllActions()
+        press("a", modifiers: .command)
+        text.breakUndoCoalescing()
+        press("R", code: 15, modifiers: .shift)
+        precondition(text.string == "R")
+        press("z", code: 6, modifiers: .command)
+        precondition(text.string == "one two three" && canvas.isEditingText, "Text undo returned: \(text.string)")
+        press("z", code: 6, modifiers: [.command, .shift])
+        precondition(text.string == "R" && canvas.isEditingText)
+        // App-specific keyboard commands must not escape to menus or canvas handlers.
+        let zoom = canvas.zoomPercentage
+        let fontSize = (state.annotations.first as! TextAnnotation).fontSize
+        for key in ["d", "e", "=", "-", "0"] { press(key, modifiers: .command) }
+        press("c", modifiers: [.command, .shift])
+        press("v", modifiers: [.command, .shift])
+        precondition(canvas.isEditingText && state.annotations.count == 1 && canvas.zoomPercentage == zoom)
+        precondition((state.annotations.first as! TextAnnotation).fontSize == fontSize)
+        text.setSelectedRange(NSRange(location: text.string.utf16.count, length: 0))
+        press("\r", code: 36)
+        press("\t", code: 48)
+        precondition(text.string.hasSuffix("\n\t") && canvas.isEditingText)
+        press("\u{7f}", code: 51)
+        precondition(text.string.hasSuffix("\n") && state.annotations.count == 1)
+        // Selection is UTF-16 based, including composed characters and multiple lines.
+        text.insertText("first café 👩🏽‍💻\nsecond line", replacementRange: NSRange(location: 0, length: text.string.utf16.count))
+        press("a", modifiers: .command)
+        precondition(text.selectedRange() == NSRange(location: 0, length: text.string.utf16.count))
+        let expected = text.string
+        let frame = editor.frame
+        window.displayIfNeeded()
+        if let bitmap = canvas.bitmapImageRepForCachingDisplay(in: canvas.bounds) {
+            canvas.cacheDisplay(in: canvas.bounds, to: bitmap)
+            let folder = URL(fileURLWithPath: "artifacts/verification")
+            try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try! bitmap.representation(using: .png, properties: [:])!.write(to: folder.appendingPathComponent("capture-text-selection.png"))
+        }
+        precondition(frame.width > 0)
+        press("\u{1b}", code: 53)
+        precondition(!canvas.isEditingText && state.selectedTool == .select && window.firstResponder === canvas)
+        app.sendEvent(NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: .option, timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 58)!)
+        precondition(window.toolbar!.items.compactMap { $0.view as? ShortcutToolButton }.allSatisfy { $0.showsShortcut })
+        precondition((state.annotations[0] as! TextAnnotation).text == expected)
+        controller.selectTool(NSToolbarItem(itemIdentifier: .init("arrow")))
+        // Re-enter an existing box from Select; the same keyboard rules apply.
+        controller.selectTool(NSToolbarItem(itemIdentifier: .init("select")))
+        let center = canvas.convert(CGPoint(x: frame.midX, y: frame.midY), to: nil)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: center, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 2, pressure: 1)!)
+        precondition(canvas.focusedTextEditor != nil && state.selectedTool == .select)
+        press("a", modifiers: .command)
+        precondition(canvas.focusedTextEditor!.textView.selectedRange().length == expected.utf16.count)
+        controller.selectTool(NSToolbarItem(itemIdentifier: .init("rectangle")))
+        precondition(!canvas.isEditingText && state.selectedTool == .rectangle)
+        // Standard New and Close still work, committing the current edit first.
+        controller.selectTool(NSToolbarItem(itemIdentifier: .init("select")))
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: center, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 2, pressure: 1)!)
+        let reopened = canvas.focusedTextEditor!
+        reopened.textView.insertText("!", replacementRange: NSRange(location: reopened.text.utf16.count, length: 0))
+        press("n", code: 45, modifiers: .command)
+        precondition(!canvas.isEditingText && (state.annotations[0] as! TextAnnotation).text == expected + "!")
+        let created = app.keyWindow!
+        precondition(created !== window)
+        created.performClose(nil)
+        window.makeKeyAndOrderFront(nil)
+        canvas.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: center, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 2, pressure: 1)!)
+        precondition(canvas.isEditingText)
+        respondToAlerts([.alertSecondButtonReturn]) { press("w", code: 13, modifiers: .command) }
+        precondition(!canvas.isEditingText && !window.isVisible)
+        print("PASS: native word selection, Select All, clipboard, text undo/redo, Unicode, blocked shortcuts, Esc, re-entry and file commands")
     }
 
     static func runShortcutChecks(app: NSApplication) {
@@ -165,17 +293,21 @@ enum WindowChecks {
         finishTextDrag(canvas, from: location)
         let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
         editor.textView.insertText("Keep this annotation", replacementRange: NSRange(location: 0, length: 0))
+        let originalFont = (state.annotations.first as! TextAnnotation).fontSize
+        let originalPreset = sizeView.selectedSegment
         press("™", code: 19)
-        precondition((state.annotations.first as! TextAnnotation).fontSize == 40)
-        precondition(canvas.isEditingText && sizeView.selectedSegment == 1)
+        precondition((state.annotations.first as! TextAnnotation).fontSize == originalFont)
+        precondition(canvas.isEditingText && sizeView.selectedSegment == originalPreset)
         press("†", code: 17, repeatKey: true)
         precondition(canvas.isEditingText, "Key repeat must not interrupt an editor")
+        let editedText = editor.text
+        precondition(editedText.contains("™") && editedText.contains("†"))
         press("\u{1b}", code: 53, modifiers: [])
         precondition(!canvas.isEditingText && state.selectedTool == .select)
         let arrowButton = buttons.first { $0.identifier!.rawValue == "arrow" }!
         arrowButton.performClick(nil)
         precondition(state.selectedTool == .arrow && arrowButton.state == .on)
-        precondition((state.annotations.first as! TextAnnotation).text == "Keep this annotation")
+        precondition((state.annotations.first as! TextAnnotation).text == editedText)
         let previousZoom = canvas.zoomPercentage
         app.sendEvent(key("=", window: window))
         precondition(canvas.zoomPercentage > previousZoom, "Zoom In must match its Command-= hint")
@@ -187,7 +319,11 @@ enum WindowChecks {
         let nextEditor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
         nextEditor.textView.insertText("Option commits text", replacementRange: NSRange(location: 0, length: 0))
         press("å", code: 0)
-        precondition(!canvas.isEditingText && (state.annotations.last as! TextAnnotation).text == "Option commits text")
+        precondition(canvas.isEditingText && state.selectedTool == .text)
+        precondition(nextEditor.text == "Option commits textå")
+        press("\u{1b}", code: 53, modifiers: [])
+        precondition((state.annotations.last as! TextAnnotation).text == "Option commits textå")
+        arrowButton.performClick(nil)
         flags(.option, in: window)
         let otherState = AnnotationDocumentState()
         let other = MainWindowController(state: otherState)
@@ -366,6 +502,10 @@ enum WindowChecks {
         let editor = canvas.subviews.compactMap { $0 as? TextAnnotationEditorView }.first!
         editor.textView.insertText("Copy this text", replacementRange: NSRange(location: 0, length: 0))
         precondition(controller.validateMenuItem(menuItem))
+        NSApp.sendEvent(key("d", window: window))
+        precondition(canvas.isEditingText && state.annotations.count == 1)
+        canvas.commitTextEditing()
+        window.makeFirstResponder(canvas)
         precondition(NSApp.mainMenu!.performKeyEquivalent(with: key("d", window: window)))
         precondition(!canvas.isEditingText && state.selectedTool == .select)
         precondition(state.annotations.count == 2)
@@ -376,7 +516,7 @@ enum WindowChecks {
         controller.redo(nil)
         precondition(state.annotations.count == 2)
         respondToAlerts([.alertSecondButtonReturn]) { window.performClose(nil) }
-        print("PASS: Cmd-D commits text, duplicates selection, and supports undo/redo")
+        print("PASS: Cmd-D stays in text editing; duplicate after editing supports undo/redo")
     }
 
     static func runChecks(app: NSApplication, delegate: AppDelegate) {

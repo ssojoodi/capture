@@ -117,6 +117,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
         updateToolButtons()
         installKeyMonitor()
+        canvasView.textEditingDidChange = { [weak self] in
+            self?.updateShortcutHints(NSEvent.modifierFlags)
+        }
         canvasView.statusHandler = { [weak self] text in self?.statusLabel.stringValue = text }
         canvasView.droppedFileHandler = { [weak self] url in self?.openDroppedFile(url) ?? false }
         canvasView.droppedImageHandler = { [weak self] image in self?.replaceWithImage(image, sourceURL: nil, message: "Dropped image") ?? false }
@@ -164,6 +167,25 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 return event
             }
             let shortcutModifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
+            if let editor = self.canvasView.focusedTextEditor {
+                if event.keyCode == 53 && shortcutModifiers.isEmpty {
+                    self.activateTool(.select)
+                    window.makeFirstResponder(self.canvasView)
+                    return nil
+                }
+                let key = event.charactersIgnoringModifiers?.lowercased()
+                let fileCommand = shortcutModifiers == .command && ["n", "o", "s", "w", "q"].contains(key ?? "")
+                    || shortcutModifiers == [.command, .shift] && key == "s"
+                if fileCommand {
+                    self.canvasView.commitTextEditing()
+                    window.makeFirstResponder(self.canvasView)
+                    return event
+                }
+                editor.handleKeyDown(event)
+                return nil
+            }
+            // Field editors in other controls retain their normal AppKit behavior.
+            if window.firstResponder is NSTextView { return event }
             if event.keyCode == 49, shortcutModifiers.isEmpty,
                self.state.selectedTool == .select, !self.canvasView.isEditingText,
                !(window.firstResponder is NSTextView), self.state.hasImage {
@@ -693,7 +715,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func updateShortcutHints(_ modifiers: NSEvent.ModifierFlags) {
         let show = modifiers.contains(.option) && window?.isKeyWindow == true
-            && NSApp.modalWindow == nil && window?.attachedSheet == nil
+            && NSApp.modalWindow == nil && window?.attachedSheet == nil && !canvasView.isEditingText
         for item in window?.toolbar?.items ?? [] {
             (item.view as? ShortcutToolButton)?.showsShortcut = show
             (item.view as? ShortcutSizeControl)?.showsShortcuts = show

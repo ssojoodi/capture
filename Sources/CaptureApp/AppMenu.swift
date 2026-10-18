@@ -42,6 +42,7 @@ enum AppMenu {
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Copy Annotation", action: #selector(MainWindowController.copySelectedAnnotation(_:)), keyEquivalent: "")
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenu.addItem(NSMenuItem.separator())
         let pasteItem = editMenu.addItem(withTitle: "Paste Image", action: #selector(MainWindowController.pasteImage(_:)), keyEquivalent: "v")
         pasteItem.keyEquivalentModifierMask = [.command, .shift]

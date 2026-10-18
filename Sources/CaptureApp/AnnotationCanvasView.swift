@@ -36,6 +36,11 @@ final class AnnotationCanvasView: NSView {
     private var activeTextWasNew = false
     private var activeTextDidRecordUndo = false
     var isEditingText: Bool { activeTextEditor != nil }
+    var focusedTextEditor: TextAnnotationEditorView? {
+        guard let editor = activeTextEditor, window?.firstResponder === editor.textView else { return nil }
+        return editor
+    }
+    var textEditingDidChange: (() -> Void)?
     var isAgentBusy: Bool {
         if isEditingText { return true }
         if case .idle = interaction { return false }
@@ -440,6 +445,7 @@ final class AnnotationCanvasView: NSView {
         activeTextWasNew = isNew
         activeTextDidRecordUndo = false
         editor.focusAtEnd()
+        textEditingDidChange?()
     }
 
     private func commitActiveTextEdit() {
@@ -453,6 +459,7 @@ final class AnnotationCanvasView: NSView {
         activeTextAnnotation = nil
         activeTextWasNew = false
         activeTextDidRecordUndo = false
+        textEditingDidChange?()
         needsDisplay = true
     }
 

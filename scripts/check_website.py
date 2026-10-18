@@ -43,7 +43,10 @@ for path in ROOT.glob('*.html'):
     image = page.meta('og:image')
     assert image == page.meta('twitter:image') and image.startswith(BASE)
     raw = (ROOT / image.removeprefix(BASE)).read_bytes()
+    assert raw[:8] == b'\x89PNG\r\n\x1a\n', 'Social preview must be a PNG'
     assert struct.unpack('>II', raw[16:24]) == (1200,630)
+    assert tuple(raw[24:26]) == (8, 2), 'Social preview must use 8-bit RGB without alpha'
+    assert len(raw) < 5_000_000, 'Social preview must be under 5 MB'
     assert (page.meta('og:image:width'),page.meta('og:image:height')) == ('1200','630')
     assert page.meta('og:image:alt') == page.meta('twitter:image:alt')
     assert not re.search(r'noindex|nofollow', page.source, re.I)
