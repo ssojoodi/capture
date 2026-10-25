@@ -21,7 +21,7 @@ extension WindowChecks {
             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
         cg.setFillColor(NSColor.systemBlue.cgColor); cg.fill(CGRect(x: 40, y: 40, width: 320, height: 220))
         state.load(image: NSImage(cgImage: cg.makeImage()!, size: CGSize(width: 400, height: 300)))
-        let controller = MainWindowController(state: state)
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
         let document = controller.agentDocument
         let originalKey = NSApp.keyWindow
         func run(_ method: String, _ extra: [String: Any] = [:]) throws -> [String: Any] {

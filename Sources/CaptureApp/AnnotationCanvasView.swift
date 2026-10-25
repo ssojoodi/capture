@@ -21,12 +21,13 @@ final class AnnotationCanvasView: NSView {
     }
 
     private let state: AnnotationDocumentState
+    private let toolDefaults: UserDefaults
     private var zoom: CGFloat = 1
     private(set) var imageOrigin: CGPoint = .zero
     private var hasPanned = false
     private(set) var isSpacePanEnabled = false
     private var interaction: CanvasInteraction = .idle
-    private var currentColor: NSColor = CapturePalette.softRed
+    private(set) var currentColor: NSColor = CapturePalette.softRed
     private var defaultSize: SizePreset = .medium
     private var currentTextBackground = NSColor.black.withAlphaComponent(0.5)
     private var activeTextEditor: TextAnnotationEditorView?
@@ -51,8 +52,13 @@ final class AnnotationCanvasView: NSView {
     var droppedFileHandler: ((URL) -> Bool)?
     var droppedImageHandler: ((NSImage) -> Bool)?
 
-    init(state: AnnotationDocumentState) {
+    init(toolDefaults: UserDefaults = .standard, state: AnnotationDocumentState) {
         self.state = state
+        self.toolDefaults = toolDefaults
+        if let raw = toolDefaults.object(forKey: "Capture.toolSize") as? Int,
+           let preset = SizePreset(rawValue: raw) { defaultSize = preset }
+        currentColor = Self.restoredColor(toolDefaults, key: "Capture.toolColor") ?? currentColor
+        currentTextBackground = Self.restoredColor(toolDefaults, key: "Capture.textBackground") ?? currentTextBackground
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor(calibratedRed: 0.965, green: 0.96, blue: 0.945, alpha: 1).cgColor
@@ -642,6 +648,19 @@ final class AnnotationCanvasView: NSView {
         return CGRect(x: origin.x, y: origin.y, width: normalized.width * zoom, height: normalized.height * zoom)
     }
 
+    // Store portable components rather than archiving AppKit colour objects.
+    private static func restoredColor(_ defaults: UserDefaults, key: String) -> NSColor? {
+        guard let components = defaults.array(forKey: key) as? [Double], components.count == 4,
+              components.allSatisfy({ $0.isFinite && (0...1).contains($0) }) else { return nil }
+        return NSColor(srgbRed: components[0], green: components[1], blue: components[2], alpha: components[3])
+    }
+
+    private func saveColor(_ color: NSColor, key: String) {
+        guard let rgb = color.usingColorSpace(.sRGB) else { return }
+        toolDefaults.set([Double(rgb.redComponent), Double(rgb.greenComponent),
+                          Double(rgb.blueComponent), Double(rgb.alphaComponent)], forKey: key)
+    }
+
     var selectedTextBackground: NSColor {
         guard let text = state.annotation(with: state.selectedAnnotationID) as? TextAnnotation else {
             return currentTextBackground
@@ -652,6 +671,7 @@ final class AnnotationCanvasView: NSView {
     func applySelectedTextBackground(_ color: NSColor) {
         commitActiveTextEdit()
         currentTextBackground = color
+        saveColor(color, key: "Capture.textBackground")
         if state.applyTextBackgroundToSelected(color) {
             statusHandler?("Changed text background")
             needsDisplay = true
@@ -662,6 +682,7 @@ final class AnnotationCanvasView: NSView {
 
     func applySelectedColor(_ color: NSColor) {
         currentColor = color
+        saveColor(color, key: "Capture.toolColor")
         if state.applyColorToSelected(color) {
             statusHandler?("Changed color")
             needsDisplay = true
@@ -695,6 +716,7 @@ final class AnnotationCanvasView: NSView {
     func applySelectedSize(_ preset: SizePreset) {
         updateActiveText()
         defaultSize = preset
+        toolDefaults.set(preset.rawValue, forKey: "Capture.toolSize")
         let selectedIsText = state.annotation(with: state.selectedAnnotationID) is TextAnnotation
         let size = selectedIsText ? preset.textSize : preset.lineThickness
         if state.applyThicknessToSelected(size) {

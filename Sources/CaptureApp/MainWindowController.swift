@@ -84,10 +84,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                       width: size.width, height: size.height)
     }
 
-    init(state: AnnotationDocumentState = AnnotationDocumentState(), screen: NSScreen? = NSScreen.main) {
+    init(toolDefaults: UserDefaults = .standard, state: AnnotationDocumentState = AnnotationDocumentState(), screen: NSScreen? = NSScreen.main) {
         self.state = state
         agentDocument = AgentDocument(state: state)
-        canvasView = AnnotationCanvasView(state: state)
+        canvasView = AnnotationCanvasView(toolDefaults: toolDefaults, state: state)
         let window = NSWindow(
             contentRect: NSRect(x: 100, y: 100, width: 1120, height: 780),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -380,6 +380,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         for captureColor in CapturePalette.all {
             popup.addItem(withTitle: captureColor.name)
         }
+        if let index = CapturePalette.all.firstIndex(where: {
+            $0.color.usingColorSpace(.sRGB) == canvasView.currentColor.usingColorSpace(.sRGB)
+        }) { popup.selectItem(at: index) }
         popup.target = self
         popup.action = #selector(selectColor(_:))
         item.view = popup

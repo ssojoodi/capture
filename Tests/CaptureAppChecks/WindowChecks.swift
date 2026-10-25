@@ -4,6 +4,13 @@ import CaptureCore
 // Standalone AppKit integration checks; run with bash scripts/check_windows.sh.
 @main
 enum WindowChecks {
+    static var toolDefaultsSuites: [String] = []
+    static func freshToolDefaults() -> UserDefaults {
+        let name = "Capture.ToolChecks." + UUID().uuidString
+        toolDefaultsSuites.append(name)
+        return UserDefaults(suiteName: name)!
+    }
+
     private static weak var closedController: NSWindowController?
     static func key(_ characters: String, window: NSWindow) -> NSEvent {
         NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command],
@@ -62,6 +69,7 @@ enum WindowChecks {
         app.mainMenu = AppMenu.makeMenu()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             autoreleasepool {
+                runToolPreferencesChecks()
                 runAgentChecks()
                 runUpdateChecks()
                 runTextKeyboardChecks(app: app)
@@ -88,14 +96,57 @@ enum WindowChecks {
             }
             precondition(closedController == nil, "Closed canvas controller was retained")
             print("PASS: Cmd-N, independent canvases, active-window shortcuts, quit cancellation, close cleanup")
+            for name in toolDefaultsSuites { UserDefaults.standard.removePersistentDomain(forName: name) }
             exit(0)
         }
         app.run()
     }
 
+    static func runToolPreferencesChecks() {
+        let defaults = freshToolDefaults()
+        let original = AnnotationCanvasView(toolDefaults: defaults, state: AnnotationDocumentState())
+        precondition(original.selectedSizePreset == .medium)
+        precondition(original.currentColor == CapturePalette.softRed)
+        precondition(original.selectedTextBackground.alphaComponent == 0.5)
+        original.applySelectedSize(.extraSmall)
+        original.applySelectedColor(CapturePalette.softBlue)
+        original.applySelectedTextBackground(CapturePalette.softGreen.withAlphaComponent(0.25))
+
+        // A new defaults instance and controller exercise the same restore path as relaunch.
+        let reloadedDefaults = UserDefaults(suiteName: toolDefaultsSuites.last!)!
+        let restored = MainWindowController(toolDefaults: reloadedDefaults)
+        let restoredCanvas = canvas(in: restored.window!)
+        let items = restored.window!.toolbar!.items
+        let size = items.first { $0.itemIdentifier.rawValue == "thickness" }!.view as! NSSegmentedControl
+        let color = items.first { $0.itemIdentifier.rawValue == "color" }!.view as! NSPopUpButton
+        precondition(size.selectedSegment == 0 && restoredCanvas.selectedSizePreset == .extraSmall)
+        precondition(color.titleOfSelectedItem == "Blue")
+        precondition(restoredCanvas.currentColor.usingColorSpace(.sRGB) == CapturePalette.softBlue.usingColorSpace(.sRGB))
+        precondition(restoredCanvas.selectedTextBackground.usingColorSpace(.sRGB)
+                     == CapturePalette.softGreen.withAlphaComponent(0.25).usingColorSpace(.sRGB))
+        restoredCanvas.applySelectedSize(.extraLarge)
+        restoredCanvas.applySelectedTextBackground(NSColor.white.withAlphaComponent(0))
+        // A later choice in an older window wins without overwriting unrelated settings.
+        original.applySelectedColor(CapturePalette.softOrange)
+        let latest = AnnotationCanvasView(toolDefaults: defaults, state: AnnotationDocumentState())
+        precondition(latest.selectedSizePreset == .extraLarge)
+        precondition(latest.selectedTextBackground.alphaComponent == 0)
+        precondition(latest.selectedTextBackground.usingColorSpace(.sRGB) == NSColor.white.withAlphaComponent(0).usingColorSpace(.sRGB))
+        precondition(latest.currentColor.usingColorSpace(.sRGB) == CapturePalette.softOrange.usingColorSpace(.sRGB))
+        restored.window!.close()
+
+        defaults.set(99, forKey: "Capture.toolSize")
+        defaults.set([0.2, 0.4], forKey: "Capture.toolColor")
+        defaults.set([0, 0, 0, 2], forKey: "Capture.textBackground")
+        let fallback = AnnotationCanvasView(toolDefaults: defaults, state: AnnotationDocumentState())
+        precondition(fallback.selectedSizePreset == .medium && fallback.currentColor == CapturePalette.softRed)
+        precondition(fallback.selectedTextBackground.alphaComponent == 0.5)
+        print("PASS: tool preferences restore size, colour and background opacity; latest choice wins; invalid settings fall back")
+    }
+
     static func runTextKeyboardChecks(app: NSApplication) {
         let state = AnnotationDocumentState()
-        let controller = MainWindowController(state: state)
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
         let window = controller.window!
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
@@ -222,7 +273,7 @@ enum WindowChecks {
 
     static func runShortcutChecks(app: NSApplication) {
         let state = AnnotationDocumentState()
-        let controller = MainWindowController(state: state)
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
         let window = controller.window!
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
@@ -326,7 +377,7 @@ enum WindowChecks {
         arrowButton.performClick(nil)
         flags(.option, in: window)
         let otherState = AnnotationDocumentState()
-        let other = MainWindowController(state: otherState)
+        let other = MainWindowController(toolDefaults: freshToolDefaults(), state: otherState)
         other.showWindow(nil)
         other.window!.makeKeyAndOrderFront(nil)
         precondition(buttons.allSatisfy { !$0.showsShortcut }, "Losing focus must clear hints")
@@ -343,7 +394,7 @@ enum WindowChecks {
 
     static func runSizeChecks() {
         let state = AnnotationDocumentState()
-        let controller = MainWindowController(state: state)
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
         let window = controller.window!
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
@@ -454,7 +505,7 @@ enum WindowChecks {
         precondition((state.annotation(with: textID) as! TextAnnotation).text == "Keep my text", "Undoing a size change must preserve text being edited")
         controller.redo(nil)
         precondition(control.selectedSegment == 1)
-        let other = MainWindowController()
+        let other = MainWindowController(toolDefaults: freshToolDefaults())
         let otherControl = other.window!.toolbar!.items.first { $0.itemIdentifier.rawValue == "thickness" }!.view as! NSSegmentedControl
         precondition(otherControl.selectedSegment == 2, "Canvas size defaults must be independent")
         other.window!.close()
@@ -486,7 +537,7 @@ enum WindowChecks {
 
     static func runDuplicateChecks() {
         let state = AnnotationDocumentState()
-        let controller = MainWindowController(state: state)
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
         let window = controller.window!
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
@@ -569,7 +620,7 @@ enum WindowChecks {
         let text = TextAnnotation(bounds: CGRect(x: 100, y: 100, width: 200, height: 100), text: "Pan me")
         state.addAnnotation(text, select: true)
         state.selectedTool = .select
-        let controller = MainWindowController(state: state)
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
         controller.showWindow(nil)
         let window = controller.window!
         window.makeKeyAndOrderFront(nil)
@@ -650,7 +701,7 @@ enum WindowChecks {
                     state.load(image: NSImage(size: CGSize(width: 100, height: 80), flipped: false) { rect in
                         NSColor.white.setFill(); rect.fill(); return true
                     })
-                    let controller = MainWindowController(state: state)
+                    let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
                     let window = controller.window!
                     controller.showWindow(nil)
                     window.layoutIfNeeded()
@@ -707,7 +758,7 @@ enum WindowChecks {
                     rect.fill()
                     return true
                 })
-                let controller = MainWindowController(state: state)
+                let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
                 let window = controller.window!
                 controller.showWindow(nil)
                 let canvas = canvas(in: window)
@@ -760,7 +811,7 @@ enum WindowChecks {
 
     static func runTextBoundsChecks() {
         let state = AnnotationDocumentState()
-        let canvas = AnnotationCanvasView(state: state)
+        let canvas = AnnotationCanvasView(toolDefaults: freshToolDefaults(), state: state)
         let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 800, height: 600),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -868,7 +919,7 @@ enum WindowChecks {
             precondition(frame.width == min(screen.width, max(760, screen.width * 0.7)))
             precondition(frame.height == min(screen.height, max(520, screen.height * 0.7)))
         }
-        let controller = MainWindowController()
+        let controller = MainWindowController(toolDefaults: freshToolDefaults())
         if let screen = NSScreen.main {
             let actual = controller.window!.frame
             let expected = MainWindowController.initialWindowFrame(in: screen.visibleFrame)
@@ -881,7 +932,7 @@ enum WindowChecks {
 
     static func runInPlaceTextChecks() {
         let state = AnnotationDocumentState()
-        let canvas = AnnotationCanvasView(state: state)
+        let canvas = AnnotationCanvasView(toolDefaults: freshToolDefaults(), state: state)
         let window = NSWindow(contentRect: CGRect(x: 100, y: 100, width: 1000, height: 800),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -963,7 +1014,7 @@ enum WindowChecks {
         state.addAnnotation(ArrowAnnotation(start: CGPoint(x: 130, y: 150), end: CGPoint(x: 460, y: 270),
             color: CapturePalette.softRed, strokeWidth: 16))
         state.selectedTool = .select
-        let controller = MainWindowController(state: state)
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
         controller.showWindow(nil)
         let window = controller.window!
         window.makeKeyAndOrderFront(nil)
@@ -982,7 +1033,7 @@ enum WindowChecks {
 
     static func runAnnotationCopyChecks(app: NSApplication) {
         let state = AnnotationDocumentState()
-        let controller = MainWindowController(state: state)
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
         let window = controller.window!
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
@@ -1032,7 +1083,7 @@ enum WindowChecks {
         precondition(!canvas.isEditingText)
         precondition((state.annotation(with: state.selectedAnnotationID) as! TextAnnotation).text == "Copy only this text")
         precondition(pasteboard.data(forType: .png) != nil)
-        let other = MainWindowController()
+        let other = MainWindowController(toolDefaults: freshToolDefaults())
         other.showWindow(nil)
         other.window!.makeKeyAndOrderFront(nil)
         other.window!.makeFirstResponder(self.canvas(in: other.window!))
@@ -1049,7 +1100,7 @@ enum WindowChecks {
         context.setFillColor(NSColor(srgbRed: 0.94, green: 0.91, blue: 0.84, alpha: 1).cgColor)
         context.fill(CGRect(x: 0, y: 0, width: 70, height: 80))
         state.load(image: NSImage(cgImage: context.makeImage()!, size: CGSize(width: 120, height: 80)))
-        let controller = MainWindowController(state: state)
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally(); controller.window!.close() }
         controller.copyFlattenedImage(to: pasteboard)
@@ -1070,7 +1121,7 @@ enum WindowChecks {
 
     static func runShareChecks(app: NSApplication) {
         let state = AnnotationDocumentState()
-        let controller = MainWindowController(state: state)
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
         let window = controller.window!
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
@@ -1121,7 +1172,7 @@ enum WindowChecks {
 
     static func runCenteredRenderingChecks() {
         let state = AnnotationDocumentState()
-        let canvas = AnnotationCanvasView(state: state)
+        let canvas = AnnotationCanvasView(toolDefaults: freshToolDefaults(), state: state)
         let window = NSWindow(contentRect: CGRect(x: 100, y: 100, width: 800, height: 600),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -1196,7 +1247,7 @@ enum WindowChecks {
 
     static func runTextClickAwayChecks() {
         let state = AnnotationDocumentState()
-        let canvas = AnnotationCanvasView(state: state)
+        let canvas = AnnotationCanvasView(toolDefaults: freshToolDefaults(), state: state)
         let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 800, height: 600),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -1250,7 +1301,7 @@ enum WindowChecks {
     }
 
     static func runTextBackgroundChecks() {
-        let controller = MainWindowController()
+        let controller = MainWindowController(toolDefaults: freshToolDefaults())
         let window = controller.window!
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
