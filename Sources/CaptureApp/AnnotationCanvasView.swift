@@ -21,12 +21,13 @@ final class AnnotationCanvasView: NSView {
     }
 
     private let state: AnnotationDocumentState
+    private let toolDefaults: UserDefaults
     private var zoom: CGFloat = 1
     private(set) var imageOrigin: CGPoint = .zero
     private var hasPanned = false
     private(set) var isSpacePanEnabled = false
     private var interaction: CanvasInteraction = .idle
-    private var currentColor: NSColor = CapturePalette.softRed
+    private(set) var currentColor: NSColor = CapturePalette.softRed
     private var defaultSize: SizePreset = .medium
     private var currentTextBackground = NSColor.black.withAlphaComponent(0.5)
     private var activeTextEditor: TextAnnotationEditorView?
@@ -51,8 +52,13 @@ final class AnnotationCanvasView: NSView {
     var droppedFileHandler: ((URL) -> Bool)?
     var droppedImageHandler: ((NSImage) -> Bool)?
 
-    init(state: AnnotationDocumentState) {
+    init(toolDefaults: UserDefaults = .standard, state: AnnotationDocumentState) {
         self.state = state
+        self.toolDefaults = toolDefaults
+        if let raw = toolDefaults.object(forKey: "Capture.toolSize") as? Int,
+           let preset = SizePreset(rawValue: raw) { defaultSize = preset }
+        currentColor = Self.restoredColor(toolDefaults, key: "Capture.toolColor") ?? currentColor
+        currentTextBackground = Self.restoredColor(toolDefaults, key: "Capture.textBackground") ?? currentTextBackground
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor(calibratedRed: 0.965, green: 0.96, blue: 0.945, alpha: 1).cgColor
@@ -148,7 +154,7 @@ final class AnnotationCanvasView: NSView {
             else { cursor = isSpacePanEnabled ? .openHand : .arrow }
         case .text:
             cursor = .iBeam
-        case .arrow, .blur, .crop, .rectangle, .ellipse:
+        case .arrow, .blur, .crop, .rectangle, .ellipse, .highlighter:
             cursor = .crosshair
         }
         addCursorRect(bounds, cursor: cursor)
@@ -301,6 +307,7 @@ final class AnnotationCanvasView: NSView {
     }
 
     private func drawSelection(for annotation: Annotation, in context: CGContext) {
+        guard !(annotation is HighlightAnnotation) else { return }
         if annotation is ArrowAnnotation {
             drawArrowSelection(annotation, in: context)
             return
@@ -368,7 +375,8 @@ final class AnnotationCanvasView: NSView {
         let rawPoint = imagePoint(for: event.locationInWindow)
         interaction = .idle
 
-        if let selected = state.annotation(with: state.selectedAnnotationID),
+        if state.selectedTool != .highlighter,
+           let selected = state.annotation(with: state.selectedAnnotationID),
            let handle = AnnotationSelectionGeometry.hitHandle(at: rawPoint, annotation: selected, hitRadius: 10 / max(zoom, 0.01)) {
             interaction = .resizing(annotation: selected, handle: handle, didRecordUndo: false)
             needsDisplay = true
@@ -392,6 +400,8 @@ final class AnnotationCanvasView: NSView {
 
         let point = rawPoint.clampedToImage(size: state.imageSize)
         switch state.selectedTool {
+        case .highlighter:
+            interaction = .creatingAnnotation(start: rawPoint, annotation: HighlightAnnotation(points: [rawPoint], color: currentColor, strokeWidth: drawingSize.lineThickness * 3))
         case .arrow:
             interaction = .creatingAnnotation(start: rawPoint, annotation: ArrowAnnotation(start: rawPoint, end: rawPoint, color: currentColor, strokeWidth: drawingSize.lineThickness))
         case .text:
@@ -541,7 +551,9 @@ final class AnnotationCanvasView: NSView {
         case let .creatingAnnotation(start, annotation):
             let end = annotation is BlurAnnotation ? point : rawPoint
             let rect = CGRect(x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y).normalized
-            if let arrow = annotation as? ArrowAnnotation {
+            if let highlight = annotation as? HighlightAnnotation {
+                if highlight.points.last != end { highlight.points.append(end) }
+            } else if let arrow = annotation as? ArrowAnnotation {
                 arrow.end = end
             } else {
                 annotation.bounds = rect
@@ -580,7 +592,9 @@ final class AnnotationCanvasView: NSView {
         // Include the final pointer position even if no drag event arrived there.
         if case let .creatingAnnotation(start, annotation) = interaction, !(annotation is BlurAnnotation) {
             let end = imagePoint(for: event.locationInWindow)
-            if let arrow = annotation as? ArrowAnnotation {
+            if let highlight = annotation as? HighlightAnnotation {
+                if highlight.points.last != end { highlight.points.append(end) }
+            } else if let arrow = annotation as? ArrowAnnotation {
                 arrow.end = end
             } else {
                 annotation.bounds = CGRect(x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y).normalized
@@ -588,7 +602,7 @@ final class AnnotationCanvasView: NSView {
         }
 
         if case let .creatingAnnotation(_, annotation) = interaction,
-           annotation.bounds.width > 4 || annotation.bounds.height > 4 {
+           annotation is HighlightAnnotation || annotation.bounds.width > 4 || annotation.bounds.height > 4 {
             if annotation is BlurAnnotation {
                 state.applyBlur(annotation.bounds)
                 statusHandler?("Blurred image")
@@ -642,6 +656,19 @@ final class AnnotationCanvasView: NSView {
         return CGRect(x: origin.x, y: origin.y, width: normalized.width * zoom, height: normalized.height * zoom)
     }
 
+    // Store portable components rather than archiving AppKit colour objects.
+    private static func restoredColor(_ defaults: UserDefaults, key: String) -> NSColor? {
+        guard let components = defaults.array(forKey: key) as? [Double], components.count == 4,
+              components.allSatisfy({ $0.isFinite && (0...1).contains($0) }) else { return nil }
+        return NSColor(srgbRed: components[0], green: components[1], blue: components[2], alpha: components[3])
+    }
+
+    private func saveColor(_ color: NSColor, key: String) {
+        guard let rgb = color.usingColorSpace(.sRGB) else { return }
+        toolDefaults.set([Double(rgb.redComponent), Double(rgb.greenComponent),
+                          Double(rgb.blueComponent), Double(rgb.alphaComponent)], forKey: key)
+    }
+
     var selectedTextBackground: NSColor {
         guard let text = state.annotation(with: state.selectedAnnotationID) as? TextAnnotation else {
             return currentTextBackground
@@ -652,6 +679,7 @@ final class AnnotationCanvasView: NSView {
     func applySelectedTextBackground(_ color: NSColor) {
         commitActiveTextEdit()
         currentTextBackground = color
+        saveColor(color, key: "Capture.textBackground")
         if state.applyTextBackgroundToSelected(color) {
             statusHandler?("Changed text background")
             needsDisplay = true
@@ -662,6 +690,7 @@ final class AnnotationCanvasView: NSView {
 
     func applySelectedColor(_ color: NSColor) {
         currentColor = color
+        saveColor(color, key: "Capture.toolColor")
         if state.applyColorToSelected(color) {
             statusHandler?("Changed color")
             needsDisplay = true
@@ -673,6 +702,7 @@ final class AnnotationCanvasView: NSView {
     var selectedSizePreset: SizePreset? {
         let thickness: CGFloat
         switch state.annotation(with: state.selectedAnnotationID) {
+        case let highlight as HighlightAnnotation: thickness = highlight.strokeWidth / 3
         case let text as TextAnnotation:
             return SizePreset.allCases.first { $0.textSize == text.fontSize }
         case let arrow as ArrowAnnotation: thickness = arrow.strokeWidth
@@ -695,8 +725,10 @@ final class AnnotationCanvasView: NSView {
     func applySelectedSize(_ preset: SizePreset) {
         updateActiveText()
         defaultSize = preset
+        toolDefaults.set(preset.rawValue, forKey: "Capture.toolSize")
         let selectedIsText = state.annotation(with: state.selectedAnnotationID) is TextAnnotation
-        let size = selectedIsText ? preset.textSize : preset.lineThickness
+        let selectedIsHighlight = state.annotation(with: state.selectedAnnotationID) is HighlightAnnotation
+        let size = selectedIsText ? preset.textSize : preset.lineThickness * (selectedIsHighlight ? 3 : 1)
         if state.applyThicknessToSelected(size) {
             repositionActiveTextEditor()
             if selectedIsText {

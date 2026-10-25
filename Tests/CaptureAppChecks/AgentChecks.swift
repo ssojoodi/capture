@@ -21,7 +21,7 @@ extension WindowChecks {
             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
         cg.setFillColor(NSColor.systemBlue.cgColor); cg.fill(CGRect(x: 40, y: 40, width: 320, height: 220))
         state.load(image: NSImage(cgImage: cg.makeImage()!, size: CGSize(width: 400, height: 300)))
-        let controller = MainWindowController(state: state)
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
         let document = controller.agentDocument
         let originalKey = NSApp.keyWindow
         func run(_ method: String, _ extra: [String: Any] = [:]) throws -> [String: Any] {
@@ -57,6 +57,13 @@ extension WindowChecks {
         _ = try! run("add_annotation", ["kind": "ellipse", "properties": ["bounds": ["x": 100, "y": 60, "width": 80, "height": 80]]])
         let text = try! run("add_annotation", ["kind": "text", "properties": ["bounds": ["x": 10, "y": 100, "width": 200, "height": 30], "text": "Capture MCP", "fontSize": 24, "backgroundColor": "#00000080"]])
         _ = try! run("update_annotation", ["annotationID": text["annotationID"]!, "properties": ["text": "Agent edit", "fontSize": 32]])
+        let marker = try! run("add_annotation", ["kind": "highlighter", "properties": ["points": [["x": 20, "y": 30], ["x": 100, "y": 40]]]])
+        let markerID = marker["annotationID"] as! String
+        precondition((state.annotations.last as! HighlightAnnotation).points[0] == CGPoint(x: 20, y: 270))
+        _ = try! run("update_annotation", ["annotationID": markerID, "properties": ["color": "#00FF00", "strokeWidth": 24]])
+        precondition((state.annotations.last as! HighlightAnnotation).points.count == 2)
+        fails("invalid_arguments") { _ = try run("add_annotation", ["kind": "highlighter", "properties": ["points": []]]) }
+        fails("invalid_arguments") { _ = try run("add_annotation", ["kind": "highlighter", "properties": ["points": [["x": true, "y": 10]]]]) }
         let count = state.annotations.count
         _ = try! run("blur_region", ["bounds": ["x": 0, "y": 0, "width": 80, "height": 80]])
         precondition(state.annotations.count == count)

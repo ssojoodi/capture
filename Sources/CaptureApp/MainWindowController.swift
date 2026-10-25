@@ -18,7 +18,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private weak var shareSession: PNGShareSession?
     var onWindowClosed: ((MainWindowController) -> Void)?
     private static let toolShortcuts: [Tool: String] = [
-        .arrow: "a", .text: "t", .ellipse: "e", .rectangle: "r", .blur: "b", .crop: "c"
+        .highlighter: "h", .arrow: "a", .text: "t", .ellipse: "e", .rectangle: "r", .blur: "b", .crop: "c"
     ]
     private static let shortcutHints: [NSToolbarItem.Identifier: String] = [
         .init(Tool.select.rawValue): "Esc",
@@ -69,6 +69,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             ToolbarSpec(identifier: ToolbarID.zoomFit, label: "Fit", symbol: "arrow.up.left.and.down.right.magnifyingglass", action: #selector(zoomToFit(_:))),
             ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.select.rawValue), label: "Select", symbol: "cursorarrow", action: #selector(selectTool(_:))),
             ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.arrow.rawValue), label: "Arrow", symbol: "arrow.up.right", action: #selector(selectTool(_:))),
+            ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.highlighter.rawValue), label: "Highlighter", symbol: "highlighter", action: #selector(selectTool(_:))),
             ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.text.rawValue), label: "Text", symbol: "textformat", action: #selector(selectTool(_:))),
             ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.blur.rawValue), label: "Blur", symbol: "drop", action: #selector(selectTool(_:))),
             ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.crop.rawValue), label: "Crop", symbol: "crop", action: #selector(selectTool(_:))),
@@ -84,10 +85,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                       width: size.width, height: size.height)
     }
 
-    init(state: AnnotationDocumentState = AnnotationDocumentState(), screen: NSScreen? = NSScreen.main) {
+    init(toolDefaults: UserDefaults = .standard, state: AnnotationDocumentState = AnnotationDocumentState(), screen: NSScreen? = NSScreen.main) {
         self.state = state
         agentDocument = AgentDocument(state: state)
-        canvasView = AnnotationCanvasView(state: state)
+        canvasView = AnnotationCanvasView(toolDefaults: toolDefaults, state: state)
         let window = NSWindow(
             contentRect: NSRect(x: 100, y: 100, width: 1120, height: 780),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -290,6 +291,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             .space,
             NSToolbarItem.Identifier(Tool.select.rawValue),
             NSToolbarItem.Identifier(Tool.arrow.rawValue),
+            NSToolbarItem.Identifier(Tool.highlighter.rawValue),
             NSToolbarItem.Identifier(Tool.text.rawValue),
             NSToolbarItem.Identifier(Tool.blur.rawValue),
             NSToolbarItem.Identifier(Tool.crop.rawValue),
@@ -380,6 +382,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         for captureColor in CapturePalette.all {
             popup.addItem(withTitle: captureColor.name)
         }
+        if let index = CapturePalette.all.firstIndex(where: {
+            $0.color.usingColorSpace(.sRGB) == canvasView.currentColor.usingColorSpace(.sRGB)
+        }) { popup.selectItem(at: index) }
         popup.target = self
         popup.action = #selector(selectColor(_:))
         item.view = popup

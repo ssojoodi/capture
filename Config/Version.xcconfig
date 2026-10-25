@@ -2,4 +2,4 @@
 
 // Single source of truth for app and release artifact versions.
 MARKETING_VERSION = 2026.10.24
-CURRENT_PROJECT_VERSION = 8
+CURRENT_PROJECT_VERSION = 9
