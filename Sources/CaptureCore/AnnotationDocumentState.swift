@@ -132,6 +132,10 @@ extension AnnotationDocumentState {
     public func applyColorToSelected(_ color: NSColor) -> Bool {
         guard let annotation = annotation(with: selectedAnnotationID) else { return false }
         switch annotation {
+        case let highlight as HighlightAnnotation:
+            guard !colorsMatch(highlight.color, color) else { return false }
+            recordUndoSnapshot()
+            highlight.color = color
         case let arrow as ArrowAnnotation:
             guard !colorsMatch(arrow.color, color) else { return false }
             recordUndoSnapshot()
@@ -173,6 +177,10 @@ extension AnnotationDocumentState {
             guard text.fontSize != thickness else { return false }
             recordUndoSnapshot()
             text.fontSize = thickness
+        case let highlight as HighlightAnnotation:
+            guard highlight.strokeWidth != thickness else { return false }
+            recordUndoSnapshot()
+            highlight.strokeWidth = thickness
         case let arrow as ArrowAnnotation:
             guard arrow.strokeWidth != thickness else { return false }
             recordUndoSnapshot()

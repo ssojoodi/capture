@@ -18,7 +18,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private weak var shareSession: PNGShareSession?
     var onWindowClosed: ((MainWindowController) -> Void)?
     private static let toolShortcuts: [Tool: String] = [
-        .arrow: "a", .text: "t", .ellipse: "e", .rectangle: "r", .blur: "b", .crop: "c"
+        .highlighter: "h", .arrow: "a", .text: "t", .ellipse: "e", .rectangle: "r", .blur: "b", .crop: "c"
     ]
     private static let shortcutHints: [NSToolbarItem.Identifier: String] = [
         .init(Tool.select.rawValue): "Esc",
@@ -69,6 +69,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             ToolbarSpec(identifier: ToolbarID.zoomFit, label: "Fit", symbol: "arrow.up.left.and.down.right.magnifyingglass", action: #selector(zoomToFit(_:))),
             ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.select.rawValue), label: "Select", symbol: "cursorarrow", action: #selector(selectTool(_:))),
             ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.arrow.rawValue), label: "Arrow", symbol: "arrow.up.right", action: #selector(selectTool(_:))),
+            ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.highlighter.rawValue), label: "Highlighter", symbol: "highlighter", action: #selector(selectTool(_:))),
             ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.text.rawValue), label: "Text", symbol: "textformat", action: #selector(selectTool(_:))),
             ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.blur.rawValue), label: "Blur", symbol: "drop", action: #selector(selectTool(_:))),
             ToolbarSpec(identifier: NSToolbarItem.Identifier(Tool.crop.rawValue), label: "Crop", symbol: "crop", action: #selector(selectTool(_:))),
@@ -290,6 +291,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             .space,
             NSToolbarItem.Identifier(Tool.select.rawValue),
             NSToolbarItem.Identifier(Tool.arrow.rawValue),
+            NSToolbarItem.Identifier(Tool.highlighter.rawValue),
             NSToolbarItem.Identifier(Tool.text.rawValue),
             NSToolbarItem.Identifier(Tool.blur.rawValue),
             NSToolbarItem.Identifier(Tool.crop.rawValue),

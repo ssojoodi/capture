@@ -16,6 +16,8 @@ public extension Annotation {
     var renderedBounds: CGRect {
         let padding: CGFloat
         switch self {
+        case let highlight as HighlightAnnotation:
+            padding = highlight.strokeWidth / 2 + 1
         case let arrow as ArrowAnnotation:
             padding = max(14, arrow.strokeWidth * 2.2) * 3.35 / 2 + 1
         case let rectangle as RectangleAnnotation:
@@ -356,5 +358,82 @@ public final class BlurAnnotation: Annotation {
 
     public func copyAnnotation(id: UUID) -> Annotation {
         BlurAnnotation(id: id, bounds: bounds, radius: radius)
+    }
+}
+
+/// A marker gesture is painted as one path so overlapping segments share one opacity.
+public final class HighlightAnnotation: Annotation {
+    public let id: UUID
+    public var points: [CGPoint]
+    public var color: NSColor
+    public var strokeWidth: CGFloat
+
+    public init(id: UUID = UUID(), points: [CGPoint], color: NSColor = CapturePalette.softYellow, strokeWidth: CGFloat = 48) {
+        self.id = id
+        self.points = points
+        self.color = color
+        self.strokeWidth = strokeWidth
+    }
+
+    public var bounds: CGRect {
+        get {
+            guard let first = points.first else { return .zero }
+            var minX = first.x, maxX = first.x, minY = first.y, maxY = first.y
+            for point in points {
+                minX = min(minX, point.x); maxX = max(maxX, point.x)
+                minY = min(minY, point.y); maxY = max(maxY, point.y)
+            }
+            return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        }
+        set {
+            let old = bounds
+            points = points.map { point in
+                CGPoint(x: old.width > 0 ? newValue.minX + (point.x - old.minX) * newValue.width / old.width : newValue.midX,
+                        y: old.height > 0 ? newValue.minY + (point.y - old.minY) * newValue.height / old.height : newValue.midY)
+            }
+        }
+    }
+
+    public func draw(in context: CGContext, baseImage: CGImage?, imageSize: CGSize, scale: CGFloat) {
+        guard let first = points.first else { return }
+        context.saveGState()
+        context.setBlendMode(.normal)
+        context.setAlpha(0.35)
+        context.setStrokeColor(color.cgColor)
+        context.setFillColor(color.cgColor)
+        context.setLineWidth(strokeWidth)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        if points.count == 1 {
+            context.fillEllipse(in: CGRect(x: first.x - strokeWidth / 2, y: first.y - strokeWidth / 2,
+                                          width: strokeWidth, height: strokeWidth))
+        } else {
+            context.beginPath()
+            context.move(to: first)
+            for point in points.dropFirst() { context.addLine(to: point) }
+            context.strokePath()
+        }
+        context.restoreGState()
+    }
+
+    public func hitTest(_ point: CGPoint) -> Bool {
+        let radius = strokeWidth / 2 + 6
+        guard let first = points.first else { return false }
+        if hypot(point.x - first.x, point.y - first.y) <= radius { return true }
+        for (a, b) in zip(points, points.dropFirst()) {
+            let dx = b.x - a.x, dy = b.y - a.y
+            let squared = dx * dx + dy * dy
+            let t = squared > 0 ? min(1, max(0, ((point.x - a.x) * dx + (point.y - a.y) * dy) / squared)) : 0
+            if hypot(point.x - a.x - t * dx, point.y - a.y - t * dy) <= radius { return true }
+        }
+        return false
+    }
+
+    public func moveBy(dx: CGFloat, dy: CGFloat) {
+        points = points.map { CGPoint(x: $0.x + dx, y: $0.y + dy) }
+    }
+
+    public func copyAnnotation(id: UUID) -> Annotation {
+        HighlightAnnotation(id: id, points: points, color: color, strokeWidth: strokeWidth)
     }
 }

@@ -34,7 +34,7 @@ Each editing command is one undo step. Undo and redo apply to the shared documen
 | `open_image` | `path` | Decode a local image into a new visible document |
 | `inspect_document` | `documentID` | Document state and annotation IDs/properties |
 | `preview_document` | `documentID` | PNG plus revision and coordinate mapping |
-| `add_annotation` | `documentID`, `revision`, `kind`, `properties` | Add an arrow, rectangle, ellipse or text box; return its ID |
+| `add_annotation` | `documentID`, `revision`, `kind`, `properties` | Add an arrow, rectangle, ellipse, freehand highlight or text box; return its ID |
 | `update_annotation` | `documentID`, `revision`, `annotationID`, `properties` | Update supplied properties while retaining the annotation ID |
 | `delete_annotation` | `documentID`, `revision`, `annotationID` | Remove an annotation |
 | `blur_region` | `documentID`, `revision`, `bounds` | Blur base-image pixels; optional `radius` defaults to 16 |
@@ -52,6 +52,7 @@ Coordinates are image pixels from the **original image's top-left**, with positi
 - Points: `{ "x": 30, "y": 40 }`.
 - Bounds: `{ "x": 30, "y": 40, "width": 200, "height": 80 }`.
 - Arrows require `start` and `end`; use these endpoints for moving/resizing, not bounds.
+- Highlighters require `points` (1–10000 x/y pairs); optional `color` and `strokeWidth` default to yellow and 48 pixels. Strokes use fixed 35% opacity.
 - Rectangles and ellipses require `bounds`.
 - Text requires `bounds` and `text`. Text wraps at the box width and expands downward to fit.
 - Arrows and shapes accept `color` and `strokeWidth`; text accepts `color`, `fontSize`, and `backgroundColor`.

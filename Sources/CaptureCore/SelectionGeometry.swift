@@ -15,6 +15,7 @@ public enum SelectionHandle: CaseIterable, Equatable {
 
 public enum AnnotationSelectionGeometry {
     public static func handleCenters(for annotation: Annotation) -> [(SelectionHandle, CGPoint)] {
+        guard !(annotation is HighlightAnnotation) else { return [] }
         if let arrow = annotation as? ArrowAnnotation {
             return [(.arrowStart, arrow.start), (.arrowEnd, arrow.end)]
         }

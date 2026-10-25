@@ -130,11 +130,12 @@ final class AgentDocument {
         return annotation
     }
     private func kindOf(_ annotation: Annotation) -> String {
-        switch annotation { case is ArrowAnnotation: return "arrow"; case is TextAnnotation: return "text"; case is RectangleAnnotation: return "rectangle"; case is EllipseAnnotation: return "ellipse"; default: return "blur" }
+        switch annotation { case is HighlightAnnotation: return "highlighter"; case is ArrowAnnotation: return "arrow"; case is TextAnnotation: return "text"; case is RectangleAnnotation: return "rectangle"; case is EllipseAnnotation: return "ellipse"; default: return "blur" }
     }
     private func describe(_ annotation: Annotation) -> [String: Any] {
         var props: [String: Any] = ["bounds": rectJSON(annotation.bounds)]
         switch annotation {
+        case let a as HighlightAnnotation: props = ["points": a.points.map(pointJSON), "color": colorJSON(a.color), "strokeWidth": a.strokeWidth]
         case let a as ArrowAnnotation: props = ["start": pointJSON(a.start), "end": pointJSON(a.end), "color": colorJSON(a.color), "strokeWidth": a.strokeWidth]
         case let a as RectangleAnnotation: props["color"] = colorJSON(a.strokeColor); props["strokeWidth"] = a.strokeWidth
         case let a as EllipseAnnotation: props["color"] = colorJSON(a.strokeColor); props["strokeWidth"] = a.strokeWidth
@@ -146,6 +147,7 @@ final class AgentDocument {
     private func makeAnnotation(kind: String, properties p: [String: Any], original: Annotation?) throws -> Annotation {
         let allowed: Set<String>
         switch kind {
+        case "highlighter": allowed = ["points", "color", "strokeWidth"]
         case "arrow": allowed = ["start", "end", "color", "strokeWidth"]
         case "rectangle", "ellipse": allowed = ["bounds", "color", "strokeWidth"]
         case "text": allowed = ["bounds", "text", "fontSize", "color", "backgroundColor"]
@@ -156,11 +158,12 @@ final class AgentDocument {
         if let original {
             candidate = original.copyAnnotation()
         } else {
-            let required = kind == "arrow" ? ["start", "end"] : kind == "text" ? ["bounds", "text"] : ["bounds"]
+            let required = kind == "highlighter" ? ["points"] : kind == "arrow" ? ["start", "end"] : kind == "text" ? ["bounds", "text"] : ["bounds"]
             guard required.allSatisfy({ p[$0] != nil }) else {
                 throw AgentError("invalid_properties", "Missing required annotation properties: \(required.joined(separator: ", ")).")
             }
             switch kind {
+            case "highlighter": candidate = HighlightAnnotation(points: [])
             case "arrow": candidate = ArrowAnnotation(start: .zero, end: .zero, strokeWidth: 16)
             case "rectangle": candidate = RectangleAnnotation(bounds: .zero, strokeWidth: 16)
             case "ellipse": candidate = EllipseAnnotation(bounds: .zero, strokeWidth: 16)
@@ -171,6 +174,10 @@ final class AgentDocument {
         let color = try p["color"].map { try parseColor($0) }
         let stroke = try p["strokeWidth"].map { _ in try number(p, "strokeWidth", fallback: 16, range: 1...256) }
         switch candidate {
+        case let highlight as HighlightAnnotation:
+            if let points = p["points"] as? [Any] { highlight.points = try points.map { try point($0) } }
+            if let color { highlight.color = color }
+            if let stroke { highlight.strokeWidth = stroke }
         case let arrow as ArrowAnnotation:
             if let start = p["start"] { arrow.start = try point(start) }
             if let end = p["end"] { arrow.end = try point(end) }

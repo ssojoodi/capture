@@ -10,6 +10,7 @@ final class AnnotationCoreTests: XCTestCase {
             TextAnnotation(bounds: rect, text: "Duplicate me", fontSize: 40, textColor: .green, backgroundColor: .purple, drawsBackground: false),
             RectangleAnnotation(bounds: rect, strokeColor: .blue, strokeWidth: 12),
             EllipseAnnotation(bounds: rect, strokeColor: .green, strokeWidth: 32),
+            HighlightAnnotation(points: [rect.origin, CGPoint(x: rect.maxX, y: rect.maxY)], color: .yellow, strokeWidth: 32),
             BlurAnnotation(bounds: rect, radius: 22)
         ]
         for original in originals {
@@ -32,6 +33,8 @@ final class AnnotationCoreTests: XCTestCase {
                 XCTAssertEqual(a.strokeColor, b.strokeColor); XCTAssertEqual(a.strokeWidth, b.strokeWidth)
             case let (a as EllipseAnnotation, b as EllipseAnnotation):
                 XCTAssertEqual(a.strokeColor, b.strokeColor); XCTAssertEqual(a.strokeWidth, b.strokeWidth)
+            case let (a as HighlightAnnotation, b as HighlightAnnotation):
+                XCTAssertEqual(a.color, b.color); XCTAssertEqual(a.strokeWidth, b.strokeWidth)
             case let (a as BlurAnnotation, b as BlurAnnotation): XCTAssertEqual(a.radius, b.radius)
             default: XCTFail("Duplicate changed annotation type")
             }
@@ -49,6 +52,43 @@ final class AnnotationCoreTests: XCTestCase {
         XCTAssertNil(empty.duplicateSelectedAnnotation())
         XCTAssertEqual(empty.revisionID, revision)
         XCTAssertFalse(empty.undo())
+    }
+
+    func testHighlighterRenderingAndEditing() throws {
+        let points = [CGPoint(x: 20, y: 50), CGPoint(x: 80, y: 50), CGPoint(x: 20, y: 50)]
+        let highlight = HighlightAnnotation(points: points, color: NSColor(srgbRed: 1, green: 1, blue: 0, alpha: 1), strokeWidth: 20)
+        let standalone = NSBitmapImageRep(cgImage: try XCTUnwrap(ImageRenderer.renderAnnotation(highlight)))
+        XCTAssertEqual(try XCTUnwrap(standalone.colorAt(x: standalone.pixelsWide / 2, y: standalone.pixelsHigh / 2)).alphaComponent, 0.35, accuracy: 0.02)
+        for background in [NSColor.black, .white] {
+            let state = AnnotationDocumentState()
+            state.load(image: solidImage(width: 100, height: 100, color: background))
+            state.addAnnotation(highlight.copyAnnotation())
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(state.imageData())))
+            let pixel = try XCTUnwrap(bitmap.colorAt(x: 50, y: 50)?.usingColorSpace(.sRGB))
+            XCTAssertEqual(pixel.alphaComponent, 1, accuracy: 0.01)
+            if background == .black {
+                var channels = [UInt](repeating: 0, count: 4)
+                bitmap.getPixel(&channels, atX: 50, y: 50)
+                XCTAssertEqual(Double(channels[0]) / 255, 0.35, accuracy: 0.02)
+                XCTAssertEqual(Double(channels[1]) / 255, 0.35, accuracy: 0.02)
+            } else {
+                XCTAssertEqual(pixel.redComponent, 1, accuracy: 0.01)
+                // Sample the encoded sRGB bytes; NSColor conversion can use the display profile.
+                var channels = [UInt](repeating: 0, count: 4)
+                bitmap.getPixel(&channels, atX: 50, y: 50)
+                XCTAssertEqual(Double(channels[2]) / 255, 0.65, accuracy: 0.02)
+            }
+            XCTAssertTrue(state.applyColorToSelected(.green))
+            XCTAssertTrue(state.applyThicknessToSelected(40))
+            XCTAssertTrue(state.undo())
+            XCTAssertEqual((state.annotations[0] as! HighlightAnnotation).strokeWidth, 20)
+        }
+        XCTAssertTrue(AnnotationSelectionGeometry.handleCenters(for: highlight).isEmpty)
+        XCTAssertTrue(highlight.hitTest(CGPoint(x: 50, y: 55)))
+        XCTAssertFalse(highlight.hitTest(CGPoint(x: 50, y: 90)))
+        highlight.bounds = CGRect(x: -20, y: -10, width: 120, height: 40)
+        XCTAssertEqual(highlight.points[0], CGPoint(x: -20, y: 10))
+        XCTAssertEqual(highlight.points[1], CGPoint(x: 100, y: 10))
     }
 
     func testArrowHitTestingIncludesLineAndExcludesFarPoint() {

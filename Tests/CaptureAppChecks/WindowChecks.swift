@@ -79,6 +79,7 @@ enum WindowChecks {
                 runDuplicateChecks()
                 runTextBoundsChecks()
                 runTextDragChecks()
+                runHighlighterChecks()
                 runShapeDragChecks()
                 runPanChecks(app: app)
                 runInPlaceTextChecks()
@@ -281,7 +282,7 @@ enum WindowChecks {
         let sizeIndex = identifiers.firstIndex(of: "thickness")!
         precondition(Array(identifiers[sizeIndex...sizeIndex + 2]) == ["thickness", "color", "textBackground"])
         let buttons = window.toolbar!.items.compactMap { $0.view as? ShortcutToolButton }
-        precondition(buttons.count == 17 && buttons.allSatisfy { !$0.showsShortcut })
+        precondition(buttons.count == 18 && buttons.allSatisfy { !$0.showsShortcut })
         func flags(_ modifiers: NSEvent.ModifierFlags, in target: NSWindow) {
             app.sendEvent(NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: modifiers,
                 timestamp: 0, windowNumber: target.windowNumber, context: nil, characters: "",
@@ -692,8 +693,64 @@ enum WindowChecks {
         print("PASS: Space pan key routing, mouse and trackpad gestures preserve image/selection/revision, focus-loss cleanup and Fit")
     }
 
+    static func runHighlighterChecks() {
+        let state = AnnotationDocumentState()
+        state.load(image: NSImage(size: CGSize(width: 600, height: 300), flipped: false) { rect in
+            NSColor.white.setFill(); rect.fill()
+            ("Highlight the important parts" as NSString).draw(at: CGPoint(x: 40, y: 150),
+                withAttributes: [.font: NSFont.systemFont(ofSize: 28), .foregroundColor: NSColor.black])
+            return true
+        })
+        let controller = MainWindowController(toolDefaults: freshToolDefaults(), state: state)
+        let window = controller.window!
+        controller.showWindow(nil)
+        let canvas = canvas(in: window)
+        canvas.resetZoom()
+        controller.selectTool(NSToolbarItem(itemIdentifier: .init("highlighter")))
+        canvas.applySelectedColor(CapturePalette.softYellow)
+        let locations = [CGPoint(x: 30, y: 165), CGPoint(x: 200, y: 160), CGPoint(x: 400, y: 170), CGPoint(x: 480, y: 130)].map { CGPoint(x: $0.x * state.imageSize.width / 600, y: $0.y * state.imageSize.height / 300) }
+        for (index, point) in locations.enumerated() {
+            let type: NSEvent.EventType = index == 0 ? .leftMouseDown : index == locations.count - 1 ? .leftMouseUp : .leftMouseDragged
+            let location = canvas.convert(CGPoint(x: canvas.imageOrigin.x + point.x, y: canvas.imageOrigin.y + point.y), to: nil)
+            let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            if type == .leftMouseDown { canvas.mouseDown(with: event) }
+            else if type == .leftMouseUp { canvas.mouseUp(with: event) }
+            else { canvas.mouseDragged(with: event) }
+        }
+        let highlight = state.annotations.first as! HighlightAnnotation
+        precondition(highlight.points == locations && highlight.strokeWidth == 48)
+        canvas.applySelectedSize(.extraSmall)
+        precondition(highlight.strokeWidth == 12)
+        precondition(state.undo() && (state.annotations.first as! HighlightAnnotation).strokeWidth == 48)
+        // Starting at the previous stroke's bounding-box corner must draw, never resize.
+        let start = highlight.bounds.origin
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseDragged, .leftMouseUp] {
+            let offset: CGFloat = type == .leftMouseDown ? 0 : 80
+            let location = canvas.convert(CGPoint(x: canvas.imageOrigin.x + start.x + offset,
+                                                 y: canvas.imageOrigin.y + start.y - offset), to: nil)
+            let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            if type == .leftMouseDown { canvas.mouseDown(with: event) }
+            else if type == .leftMouseDragged { canvas.mouseDragged(with: event) }
+            else { canvas.mouseUp(with: event) }
+        }
+        precondition(state.annotations.count == 2)
+        precondition((state.annotations[0] as! HighlightAnnotation).points == locations)
+        precondition(state.undo() && state.annotations.count == 1)
+        // Keep the stroke selected in the screenshot to verify there is no bounding box.
+        canvas.displayIfNeeded()
+        let bitmap = canvas.bitmapImageRepForCachingDisplay(in: canvas.bounds)!
+        canvas.cacheDisplay(in: canvas.bounds, to: bitmap)
+        let folder = URL(fileURLWithPath: "artifacts/verification")
+        try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try! bitmap.representation(using: .png, properties: [:])!.write(to: folder.appendingPathComponent("capture-highlighter.png"))
+        window.close()
+        print("PASS: freehand marker retains intermediate points and final endpoint; selected size and undo")
+    }
+
     static func runShapeDragChecks() {
-        for tool in [Tool.rectangle, .ellipse, .arrow] {
+        for tool in [Tool.rectangle, .ellipse, .arrow, .highlighter] {
             for scale: CGFloat in [1, 0.8] {
                 for pair in [(CGPoint(x: -70, y: -60), CGPoint(x: -20, y: -10)),
                              (CGPoint(x: 150, y: 130), CGPoint(x: -40, y: -30))] {
