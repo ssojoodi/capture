@@ -5,14 +5,23 @@ import CaptureCore
 @main
 enum AgentFixture {
     static func main() {
-        let folder = URL(fileURLWithPath: CommandLine.arguments[1])
+        // A temporary app bundle exercises Launch Services without touching installed Capture.
+        let bundledFolder = Bundle.main.object(forInfoDictionaryKey: "CaptureFixtureFolder") as? String
+        let folder = URL(fileURLWithPath: bundledFolder ?? CommandLine.arguments[1])
+        let identity = bundledFolder == nil ? folder.path : Bundle.main.bundlePath
+        if bundledFolder != nil {
+            let counter = folder.appendingPathComponent("launches")
+            let count = (try? String(contentsOf: counter, encoding: .utf8)).flatMap(Int.init) ?? 0
+            try! String(count + 1).write(to: counter, atomically: true, encoding: .utf8)
+            try! String(getpid()).write(to: folder.appendingPathComponent("pid"), atomically: true, encoding: .utf8)
+        }
         let suite = "Capture.AgentFixture." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
         defaults.set(true, forKey: "agentControl.enabled")
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         app.appearance = NSAppearance(named: .aqua)
-        let delegate = AppDelegate(agentDefaults: defaults, agentSocketIdentity: folder.path)
+        let delegate = AppDelegate(agentDefaults: defaults, agentSocketIdentity: identity)
         app.delegate = delegate
         app.mainMenu = AppMenu.makeMenu()
         let cg = CGContext(data: nil, width: 640, height: 400, bitsPerComponent: 8, bytesPerRow: 0,
@@ -22,7 +31,7 @@ enum AgentFixture {
         let png = NSBitmapImageRep(cgImage: cg.makeImage()!).representation(using: .png, properties: [:])!
         try! png.write(to: folder.appendingPathComponent("input.png"))
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            try! Data(AgentWire.directory(for: folder.path).utf8).write(to: folder.appendingPathComponent("ready"))
+            try! Data(AgentWire.directory(for: identity).utf8).write(to: folder.appendingPathComponent("ready"))
         }
         let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
             let control = folder.appendingPathComponent("control.json")
