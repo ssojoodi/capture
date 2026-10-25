@@ -1,5 +1,5 @@
 #include "Updates.xcconfig"
 
 // Single source of truth for app and release artifact versions.
-MARKETING_VERSION = 2026.10.17
-CURRENT_PROJECT_VERSION = 7
+MARKETING_VERSION = 2026.10.24
+CURRENT_PROJECT_VERSION = 8

@@ -6,6 +6,9 @@
 import base64
 import json
 import os
+import plistlib
+import shutil
+import signal
 from pathlib import Path
 import select
 import struct
@@ -29,6 +32,7 @@ with tempfile.TemporaryDirectory(prefix='capture-mcp-check-') as tmp:
     log = open(folder / 'process.log', 'w')
     fixture = subprocess.Popen([fixture_path, tmp], stdout=log, stderr=log)
     clients = []
+    lazy_folder = folder / "lazy-launch"
     try:
         wait_for(lambda: (folder / 'ready').exists() or fixture.poll() is not None)
         assert fixture.poll() is None, (folder / 'process.log').read_text()
@@ -37,9 +41,13 @@ with tempfile.TemporaryDirectory(prefix='capture-mcp-check-') as tmp:
         assert oct(os.stat(directory + '/agent.sock').st_mode & 0o777) == '0o600'
 
         class Client:
-            def __init__(self, capabilities=None):
-                self.process = subprocess.Popen([helper_path], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                    stderr=log, env=dict(os.environ, CAPTURE_MCP_TEST_SOCKET_DIRECTORY=directory))
+            def __init__(self, capabilities=None, executable=helper_path, socket_directory=directory, bufsize=-1):
+                environment = dict(os.environ)
+                environment.pop('CAPTURE_MCP_TEST_SOCKET_DIRECTORY', None)
+                if socket_directory is not None:
+                    environment['CAPTURE_MCP_TEST_SOCKET_DIRECTORY'] = socket_directory
+                self.process = subprocess.Popen([executable], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=log, env=environment, bufsize=bufsize)
                 clients.append(self.process)
                 self.serial = 0
                 result = self.rpc('initialize', {'protocolVersion': '2025-06-18', 'capabilities': capabilities or {}, 'clientInfo': {'name': 'Capture tests', 'version': '1'}})
@@ -66,11 +74,11 @@ with tempfile.TemporaryDirectory(prefix='capture-mcp-check-') as tmp:
                     assert not result.get('isError'), result
                 return payload, result
 
-        def control(action, doc=None):
-            (folder / 'ack').unlink(missing_ok=True)
-            (folder / 'control.tmp').write_text(json.dumps({'action': action, 'documentID': doc or ''}))
-            os.replace(folder / 'control.tmp', folder / 'control.json')
-            wait_for(lambda: (folder / 'ack').exists())
+        def control(action, doc=None, target=folder):
+            (target / 'ack').unlink(missing_ok=True)
+            (target / 'control.tmp').write_text(json.dumps({'action': action, 'documentID': doc or ''}))
+            os.replace(target / 'control.tmp', target / 'control.json')
+            wait_for(lambda: (target / 'ack').exists())
 
         client = Client({'experimental': {'codex/sandbox-state-meta': {}, 'test/nested': {'enabled': True, 'values': [1, None]}},
                          'roots': {'listChanged': True}})
@@ -134,11 +142,63 @@ with tempfile.TemporaryDirectory(prefix='capture-mcp-check-') as tmp:
         client.tool('list_documents', error='connection_unavailable')
         assert not Path(directory + '/agent.sock').exists()
         print('PASS: real MCP initialize/list/call, preview PNG, all edits, two documents/clients, stale/busy errors, exports, disable/re-enable, quit and socket cleanup')
+
+        # Exercise the production launch path with a private app, without the socket override.
+        lazy_folder.mkdir()
+        bundle = lazy_folder / 'Capture Launch Fixture.app'
+        contents = bundle / 'Contents'
+        (contents / 'MacOS').mkdir(parents=True)
+        (contents / 'Helpers').mkdir()
+        shutil.copy2(fixture_path, contents / 'MacOS' / 'CaptureFixture')
+        bundled_helper = contents / 'Helpers' / 'capture-mcp'
+        shutil.copy2(helper_path, bundled_helper)
+        with (contents / 'Info.plist').open('wb') as output:
+            plistlib.dump({'CFBundleExecutable': 'CaptureFixture', 'CFBundleIdentifier': 'com.capture.launchfixture.' + folder.name,
+                          'CFBundleName': 'Capture Launch Fixture', 'CFBundlePackageType': 'APPL',
+                          'CaptureFixtureFolder': str(lazy_folder)}, output)
+        lazy = Client(executable=str(bundled_helper), socket_directory=None, bufsize=0)
+        assert lazy.rpc('ping', {}) == {}
+        assert len(lazy.rpc('tools/list', {})['tools']) == 13
+        assert not (lazy_folder / 'launches').exists(), 'Initialize/ping/list must not launch the app'
+        lazy.tool('unknown_tool', error='unknown_tool')
+        lazy.tool('open_image', {'path': 42}, error='invalid_arguments')
+        assert not (lazy_folder / 'launches').exists(), 'Invalid initial calls must not launch the app'
+        # Queue two calls before reading either reply to exercise actor reentrancy during launch.
+        for identifier in [100, 101]:
+            lazy.send({'jsonrpc': '2.0', 'id': identifier, 'method': 'tools/call',
+                       'params': {'name': 'list_documents', 'arguments': {}}})
+        for _ in range(2):
+            assert select.select([lazy.process.stdout], [], [], 20)[0], 'Lazy launch timeout'
+            reply = json.loads(lazy.process.stdout.readline())
+            assert reply['id'] in [100, 101] and not reply['result'].get('isError'), reply
+            assert json.loads(reply['result']['content'][0]['text'])['documents']
+        assert (lazy_folder / 'launches').read_text() == '1', 'Concurrent calls must launch once'
+        lazy.tool('list_documents')
+        assert (lazy_folder / 'launches').read_text() == '1', 'Existing app must be reused'
+        control('toggle', target=lazy_folder)
+        existing = Client(executable=str(bundled_helper), socket_directory=None, bufsize=0)
+        existing.tool('list_documents', error='connection_unavailable')
+        assert (lazy_folder / 'launches').read_text() == '1', 'Disabled control must not launch a second app'
+        control('toggle', target=lazy_folder)
+        existing.tool('list_documents')
+        assert (lazy_folder / 'launches').read_text() == '1', 'A new helper must reuse the running app'
+        (lazy_folder / 'control.json').write_text(json.dumps({'action': 'quit'}))
+        socket = Path((lazy_folder / 'ready').read_text()) / 'agent.sock'
+        wait_for(lambda: not socket.exists())
+        lazy.tool('list_documents', error='connection_unavailable')
+        lazy.tool('list_documents', error='connection_unavailable')
+        assert lazy.rpc('ping', {}) == {} and len(lazy.rpc('tools/list', {})['tools']) == 13
+        assert (lazy_folder / 'launches').read_text() == '1', 'Quit must not trigger another launch'
+        print('PASS: discovery and invalid calls leave app closed; concurrent first calls launch once; existing app reuse and explicit quit respected')
+
     except Exception:
         log.flush()
         print((folder / 'process.log').read_text(), file=sys.stderr)
         raise
     finally:
+        if (lazy_folder / 'pid').exists():
+            try: os.kill(int((lazy_folder / 'pid').read_text()), signal.SIGTERM)
+            except ProcessLookupError: pass
         for process in clients + [fixture]:
             if process.poll() is None:
                 process.terminate()

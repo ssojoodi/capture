@@ -8,7 +8,7 @@ Capture exposes local MCP tools for editing images in its visible macOS windows.
 2. Choose **Capture → Allow Agent Control**. This is off by default and grants access to all open documents.
 3. Choose **Capture → Copy MCP Configuration** and add that configuration to a local MCP client.
 
-The configuration points to `Capture.app/Contents/Helpers/capture-mcp`. It must use the actual app location; copy it again if you move the app. The helper launches its containing app when necessary. It does not enable access automatically.
+The configuration points to `Capture.app/Contents/Helpers/capture-mcp`. It must use the actual app location; copy it again if you move the app. MCP initialization, ping, and tool discovery do not launch Capture. The first valid tool call launches its containing app if needed. Concurrent initial calls share one launch attempt. It does not enable access automatically.
 
 The helper uses MCP over stdio and connects to Capture over a private Unix-domain socket. It listens on no network port. Socket access is restricted to the current macOS user. Turning agent control off disconnects existing sessions. Disconnecting a client leaves documents open. Quitting Capture ends connections without automatically reopening the app; restart the client connection when ready.
 
