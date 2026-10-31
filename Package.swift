@@ -11,7 +11,7 @@ let package = Package(
         .executable(name: "Capture", targets: ["CaptureApp"]),
         .executable(name: "capture-mcp", targets: ["CaptureMCP"])
     ],
-    dependencies: [.package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"), .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0")],
+    dependencies: [.package(path: "Vendor/swift-sdk"), .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0")],
     targets: [
         .target(name: "CaptureAutomation"),
         .executableTarget(name: "CaptureMCP", dependencies: ["CaptureAutomation", .product(name: "MCP", package: "swift-sdk"), .product(name: "Logging", package: "swift-log")], swiftSettings: [.swiftLanguageMode(.v5)]),
