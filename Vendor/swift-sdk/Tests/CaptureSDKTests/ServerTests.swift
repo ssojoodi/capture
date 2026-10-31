@@ -86,3 +86,11 @@ private func waitFor(_ predicate: () async -> Bool) async throws {
     #expect((error["error"] as? [String: Any])?["code"] as? Int == -32700)
     await server.stop()
 }
+
+@Test func initializationPreservesArbitraryCapabilities() throws {
+    let json = #"{"protocolVersion":"2025-06-18","clientInfo":{"name":"Codex","version":"1"},"capabilities":{"experimental":{"codex/state":{"enabled":true,"values":[1,null,"x"]}},"sampling":{"tools":{},"context":{}},"elicitation":{"form":{},"url":{}},"roots":{"listChanged":true},"future":{"nested":[false]}}}"#
+    let parameters = try JSONDecoder().decode(Initialize.Parameters.self, from: Data(json.utf8))
+    let object = try JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
+    let expected = try JSONDecoder().decode([String: Value].self, from: JSONSerialization.data(withJSONObject: object["capabilities"]!))
+    #expect(parameters.capabilities == expected)
+}

@@ -38,3 +38,7 @@ Additional omitted source paths:
 - `Base/Utilities/RequestContext.swift`
 
 `Progress.swift` retains upstream Metadata/ProgressToken decoding, but omits the unused emitted progress notification.
+
+### Initialization simplification
+
+Client capabilities are retained as `[String: Value]`: Capture never calls them and must accept arbitrary experimental/future JSON. The obsolete CompatibleStdioTransport normalization wrapper is removed; the helper uses upstream StdioTransport directly. Root Package.swift no longer declares swift-log directly; the SDK still uses it for diagnostics. Test arbitrary capability preservation and real Codex initialization on upgrades.

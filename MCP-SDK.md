@@ -31,7 +31,7 @@ Base/Transports/HTTPServer/
 
 The vendored SDK manifest exposes only the `MCP` library target, with Logging and SystemPackage dependencies and upstream StrictConcurrency enabled. Omit EventSource, documentation plugins, conformance executables and their NIO dependencies from that subset manifest. Keep client protocol types and other shared sources unless separately verified unnecessary.
 
-Capture's `CompatibleStdioTransport` is a separate compatibility workaround: version 0.12.1 incorrectly constrains experimental capabilities to string values. Review whether upstream fixes this before carrying the workaround into another SDK version.
+Upstream 0.12.1 restricts experimental capabilities to strings. Our retained client capability dictionary accepts arbitrary JSON, so no Capture-side normalization transport is needed. Keep that behavior on upgrades.
 
 ## Integration requirements
 
@@ -109,3 +109,9 @@ Additional omitted source paths:
 `Progress.swift` retains upstream Metadata/ProgressToken decoding, but omits the unused emitted progress notification.
 
 The tools-only server stage passed the new direct cancellation/error tests, full stripped-helper protocol/lifecycle checks and actual Codex discovery. Its stripped arm64 -Osize helper is 1,127,328 bytes, down from 1,518,704.
+
+### Initialization simplification
+
+Client capabilities are retained as `[String: Value]`: Capture never calls them and must accept arbitrary experimental/future JSON. The obsolete CompatibleStdioTransport normalization wrapper is removed; the helper uses upstream StdioTransport directly. Root Package.swift no longer declares swift-log directly; the SDK still uses it for diagnostics. Test arbitrary capability preservation and real Codex initialization on upgrades.
+
+The initialization simplification passed three SDK boundary tests (including exact arbitrary capability preservation), full stripped-helper protocol/lifecycle tests and installed Codex discovery. The stripped helper is 1,078,576 bytes. Only the SDK, not the Capture helper, directly depends on Logging now.

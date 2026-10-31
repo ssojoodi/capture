@@ -100,7 +100,7 @@ struct CaptureMCP {
                     return .init(content: [.text(text: text, annotations: nil, _meta: nil)], isError: true)
                 }
             }
-            try await server.start(transport: CompatibleStdioTransport())
+            try await server.start(transport: StdioTransport())
             await server.waitUntilCompleted()
         } catch {
             FileHandle.standardError.write(Data(("Capture MCP: " + error.localizedDescription + "\n").utf8))
