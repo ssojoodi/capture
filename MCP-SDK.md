@@ -9,7 +9,7 @@ Capture uses the pinned stdio-only SDK in `Vendor/swift-sdk` as its production d
 - Upstream: `https://github.com/modelcontextprotocol/swift-sdk.git`
 - Tested version: `0.12.1`
 - Tested revision: `a0ae212ebf6eab5f754c3129608bc5557637e605`
-- Retained MCP source: 27 Swift files; exact counts vary with the recorded patch.
+- Retained MCP source: 26 Swift files; exact counts vary with the recorded patch.
 - Required dependencies: `swift-log` and `swift-system`.
 - EventSource is unnecessary for the subset. NIO is not linked into Capture's existing helper; its appearance in dependency resolution does not imply shipped code.
 
@@ -21,6 +21,7 @@ Keep the upstream `Sources/MCP` files except these paths:
 Base/Authorization/
 Base/Transports/HTTPClientTransport.swift
 Base/Transports/NetworkTransport.swift
+Base/Transports/InMemoryTransport.swift
 Base/Transports/HTTPServer/
 ```
 
@@ -89,3 +90,7 @@ All 41 core tests and release-workflow checks passed. MCP tools and lifecycle ch
 Removed HTTPServerTypes.swift and the unused HandlerContext/task-local plumbing from Server.swift. Handler tasks still retain the upstream cancellation and error-handling behavior. There are no HTTP transport/context types left in the retained source; icon URL documentation still mentions HTTP because URLs are valid protocol data.
 
 The stripped arm64 -Osize helper measures 1,697,688 bytes (about 25 KB less than the previous production subset). A fresh helper build, MCP protocol/lifecycle checks and installed Codex discovery of all 13 tools passed. Both recorded source patches reverse and reapply cleanly. Release artifacts must be rebuilt after this change; existing packaged metadata was not modified by this cleanup.
+
+## In-memory transport removal (October 31, 2026)
+
+Removed the unreferenced InMemoryTransport.swift; no extra source patch was required. StdioTransport is now the only retained concrete transport. Release build, full MCP protocol/lifecycle checks and installed Codex discovery passed. The stripped arm64 -Osize helper measures 1,677,464 bytes, saving a further 20,224 bytes compared with the HTTP-context cleanup. Rebuild release artifacts before shipping.

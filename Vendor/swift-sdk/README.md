@@ -15,6 +15,7 @@ Omitted source paths (relative to Sources/MCP):
 - `Base/Authorization/`
 - `Base/Transports/HTTPClientTransport.swift`
 - `Base/Transports/NetworkTransport.swift`
+- `Base/Transports/InMemoryTransport.swift`
 - `Base/Transports/HTTPServer/`
 
 `Server.swift` removes the unused HTTP handler context, its task-local storage and the transport cast. Request handling and cancellation remain intact. The entire HTTPServer directory is omitted. Both Client.swift and Server.swift changes are recorded in `stdio-only.patch`.
