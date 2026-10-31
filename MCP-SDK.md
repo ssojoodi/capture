@@ -9,7 +9,7 @@ Capture uses the pinned stdio-only SDK in `Vendor/swift-sdk` as its production d
 - Upstream: `https://github.com/modelcontextprotocol/swift-sdk.git`
 - Tested version: `0.12.1`
 - Tested revision: `a0ae212ebf6eab5f754c3129608bc5557637e605`
-- Retained MCP source: 28 Swift files, 7,338 lines, 278,906 bytes, including comments.
+- Retained MCP source: 27 Swift files; exact counts vary with the recorded patch.
 - Required dependencies: `swift-log` and `swift-system`.
 - EventSource is unnecessary for the subset. NIO is not linked into Capture's existing helper; its appearance in dependency resolution does not imply shipped code.
 
@@ -21,12 +21,10 @@ Keep the upstream `Sources/MCP` files except these paths:
 Base/Authorization/
 Base/Transports/HTTPClientTransport.swift
 Base/Transports/NetworkTransport.swift
-Base/Transports/HTTPServer/StatefulHTTPServerTransport.swift
-Base/Transports/HTTPServer/StatelessHTTPServerTransport.swift
-Base/Transports/HTTPServer/HTTPRequestValidation.swift
+Base/Transports/HTTPServer/
 ```
 
-Retain `Base/Transports/HTTPServer/HTTPServerTypes.swift`. The server uses its `HTTPRequest` and `HTTPContextProviding` types even with stdio. These shared types do not enable an HTTP transport.
+`Server.swift` removes the unused HTTP handler context, its task-local storage and the transport cast. Request handling and cancellation remain intact. The entire HTTPServer directory is omitted. Both Client.swift and Server.swift changes are recorded in `stdio-only.patch`.
 
 In `Sources/MCP/Client/Client.swift`, retain the Capture modification notice and remove only this HTTP-specific hook from initialization:
 
@@ -85,3 +83,9 @@ The saving is 24.1% of the helper and about 16.3% of the optimized app bundle. E
 A fresh SwiftPM scratch directory built the production local dependency without referencing the experiment. The actual Xcode Release bundle built successfully; its stripped helper measured 1,723,000 bytes and its ad-hoc-signed test bundle measured 2,829,251 bytes, including the upstream license. Final distribution signing may change these figures slightly.
 
 All 41 core tests and release-workflow checks passed. MCP tools and lifecycle checks passed on isolated retry after a temporary fixture-readiness error. Installed Codex connected and discovered all 13 tools. All three dSYM UUIDs matched their production binaries. The documented patch reverses cleanly; retained source changes are confined to Client.swift. Package.resolved contains only swift-log and swift-system. No signed/notarized release DMG was published during adoption.
+
+## HTTP context removal (October 31, 2026)
+
+Removed HTTPServerTypes.swift and the unused HandlerContext/task-local plumbing from Server.swift. Handler tasks still retain the upstream cancellation and error-handling behavior. There are no HTTP transport/context types left in the retained source; icon URL documentation still mentions HTTP because URLs are valid protocol data.
+
+The stripped arm64 -Osize helper measures 1,697,688 bytes (about 25 KB less than the previous production subset). A fresh helper build, MCP protocol/lifecycle checks and installed Codex discovery of all 13 tools passed. Both recorded source patches reverse and reapply cleanly. Release artifacts must be rebuilt after this change; existing packaged metadata was not modified by this cleanup.

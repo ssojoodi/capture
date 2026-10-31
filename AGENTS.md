@@ -74,6 +74,7 @@ Expected goal milestones:
 
 - Read [MCP-SDK.md](MCP-SDK.md) before changing the MCP SDK, helper dependencies, or transport compatibility code.
 - Production uses the pinned stdio-only SDK 0.12.1 in `Vendor/swift-sdk`, with its upstream license, provenance and exact source patch. Never depend on ignored `.build` experiments or modify SwiftPM checkout caches as a release strategy.
+- The subset omits all HTTP transport types and handler context; both Client.swift and Server.swift patches must be reviewed on upgrades. Preserve stdio request handling and cancellation.
 - When updating the subset, pin the upstream revision, preserve its license, and record the exact exclusions and small source patch. Review upstream protocol/security changes and prefer an upstream stdio-only product if available.
 - SDK upgrades require MCP protocol/lifecycle and Codex discovery checks against the actual stripped helper, plus a fresh size comparison. Reassess the experimental-capabilities workaround when upstream changes. Update the maintenance document and lockfile together; do not leave a local subset permanently frozen.
 

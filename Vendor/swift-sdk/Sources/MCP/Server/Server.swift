@@ -1,3 +1,4 @@
+// Modified for Capture: removed HTTP handler context; see stdio-only.patch in the vendor root.
 import Logging
 
 import struct Foundation.Data
@@ -297,42 +298,6 @@ public actor Server {
     }
 
     // MARK: - Request Context
-
-    /// Per-dispatch context the SDK attaches to the currently executing handler.
-    ///
-    /// Exposed via the ``Server/currentHandlerContext`` task-local so method
-    /// handlers can observe the originating HTTP request (headers, auth, path,
-    /// body) without changing the `withMethodHandler` signature.
-    public struct HandlerContext: Sendable {
-        /// The JSON-RPC request id of the in-flight request. SDK-internal use
-        /// (e.g. transports closing an SSE stream mid-call per SEP-1699).
-        package let id: ID
-
-        /// The originating HTTP request, if the active transport conforms to
-        /// ``HTTPContextProviding``. `nil` for transports that don't carry HTTP
-        /// context (stdio, in-memory) or for handlers reached off the dispatch
-        /// path.
-        public let httpContext: HTTPRequest?
-
-        package init(id: ID, httpContext: HTTPRequest?) {
-            self.id = id
-            self.httpContext = httpContext
-        }
-    }
-
-    /// The handler context for the currently executing method handler.
-    ///
-    /// Set via `@TaskLocal` before dispatching each request, so it propagates
-    /// automatically into the handler task. `nil` outside of a handler.
-    ///
-    /// When spawning `Task.detached { … }` from inside a handler, capture the
-    /// value up front — detached tasks do not inherit task-locals:
-    ///
-    /// ```swift
-    /// let ctx = Server.currentHandlerContext
-    /// Task.detached { await doWork(with: ctx?.httpContext) }
-    /// ```
-    @TaskLocal public static var currentHandlerContext: HandlerContext? = nil
 
     // MARK: - Registration
 
@@ -778,37 +743,26 @@ public actor Server {
             return response
         }
 
-        // Ask the transport for the originating HTTP request so handlers can observe
-        // headers/auth via `Server.currentHandlerContext?.httpContext`. Transports
-        // that don't carry HTTP context (stdio, in-memory) don't conform.
-        let httpContext = await (connection as? any HTTPContextProviding)?
-            .httpRequestContext(for: request.id)
-        let handlerContext = HandlerContext(id: request.id, httpContext: httpContext)
-
         // Create a task to handle the request with cancellation support.
-        // Set currentHandlerContext as a task local so handlers see it.
-        var handlerTask: Task<Response<AnyMethod>, Error>!
-        Server.$currentHandlerContext.withValue(handlerContext) {
-            handlerTask = Task<Response<AnyMethod>, Error> {
-                do {
-                    // Check if task was cancelled before starting
-                    try Task.checkCancellation()
+        let handlerTask = Task<Response<AnyMethod>, Error> {
+            do {
+                // Check if task was cancelled before starting
+                try Task.checkCancellation()
 
-                    // Handle request and get response
-                    let response = try await handler(request)
-                    return response
-                } catch is CancellationError {
-                    // Request was cancelled, don't send a response per MCP spec
-                    await logger?.debug(
-                        "Request cancelled",
-                        metadata: ["id": "\(request.id)", "method": "\(request.method)"]
-                    )
-                    throw CancellationError()
-                } catch {
-                    let mcpError =
-                        error as? MCPError ?? MCPError.internalError(error.localizedDescription)
-                    return AnyMethod.response(id: request.id, error: mcpError)
-                }
+                // Handle request and get response
+                let response = try await handler(request)
+                return response
+            } catch is CancellationError {
+                // Request was cancelled, don't send a response per MCP spec
+                await logger?.debug(
+                    "Request cancelled",
+                    metadata: ["id": "\(request.id)", "method": "\(request.method)"]
+                )
+                throw CancellationError()
+            } catch {
+                let mcpError =
+                    error as? MCPError ?? MCPError.internalError(error.localizedDescription)
+                return AnyMethod.response(id: request.id, error: mcpError)
             }
         }
 
