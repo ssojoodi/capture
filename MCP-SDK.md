@@ -23,15 +23,22 @@ Base/Transports/HTTPClientTransport.swift
 Base/Transports/NetworkTransport.swift
 Base/Transports/InMemoryTransport.swift
 Base/Transports/HTTPServer/
+Base/PendingRequest.swift
+Base/UnitInterval.swift
+Base/Utilities/RequestContext.swift
+Client/Sampling.swift
+Client/Elicitation.swift
+Client/Roots.swift
+Server/Logging.swift
+Server/Prompts.swift
+Server/Completion.swift
+Server/Resources.swift
+Extensions/Data+Extensions.swift
 ```
 
-`Server.swift` removes the unused HTTP handler context, its task-local storage and the transport cast. Request handling and cancellation remain intact. The entire HTTPServer directory is omitted. All retained source changes are recorded in `stdio-only.patch`.
+All edits to retained upstream files are recorded in `Vendor/swift-sdk/stdio-only.patch` (apply with `git apply --unidiff-zero`). The patch removes outbound/client features, unused server capabilities and content types, URL elicitation errors and automatic data-URL conversion. Client capabilities accept arbitrary JSON. The helper uses upstream StdioTransport directly; no normalization wrapper remains.
 
-`Client.swift` retains only the upstream identity and capability models needed to decode initialization. The outbound client actor, configuration, connection loop, request APIs and handlers are omitted. These deletions are recorded in `stdio-only.patch`; Capture never connects to another MCP server.
-
-The vendored SDK manifest exposes only the `MCP` library target, with Logging and SystemPackage dependencies and upstream StrictConcurrency enabled. Omit EventSource, documentation plugins, conformance executables and their NIO dependencies from that subset manifest. Keep client protocol types and other shared sources unless separately verified unnecessary.
-
-Upstream 0.12.1 restricts experimental capabilities to strings. Our retained client capability dictionary accepts arbitrary JSON, so no Capture-side normalization transport is needed. Keep that behavior on upgrades.
+The vendored manifest exposes the MCP library with Logging, SystemPackage and upstream StrictConcurrency. A Capture-owned test target checks the retained protocol boundary. Upstream documentation plugins, examples, conformance executables, EventSource and NIO dependencies are omitted.
 
 ## Integration requirements
 
@@ -48,7 +55,7 @@ Review upstream changes when upgrading dependencies, investigating MCP compatibi
 
 1. Read upstream release notes and compare the pinned revision with the intended version. Check protocol, stdio framing, cancellation, lifecycle, capability decoding and security changes.
 2. First check whether upstream now provides a supported stdio-only product. Prefer that over retaining our patch.
-3. Refresh from the new upstream source. Reapply exclusions and the hook removal only where still required. Review changed context types and new cross-references; do not blindly replay or broaden the patch to make compilation pass.
+3. Refresh from the new upstream source. Reapply exclusions and the recorded source changes only where still required. Review changed context types and new cross-references; do not blindly replay or broaden the patch to make compilation pass.
 4. Preserve upstream licenses. Update the recorded tag/revision, patch, manifest and dependency lockfile together.
 5. Run validation and record actual results and stripped sizes in the PR. If a check fails, resolve it before shipping the update.
 
@@ -131,3 +138,28 @@ This stage passed all four SDK boundary tests, full stripped-helper protocol/lif
 ### JSON string preservation
 
 `Value.swift` omits its special binary-data case and automatic data-URL parsing. Capture uses ordinary JSON values and the dedicated image content field; literal data URLs in text arguments now remain unchanged. `Extensions/Data+Extensions.swift` and its RegexBuilder import are omitted. Six SDK boundary tests, full protocol/lifecycle checks and Codex discovery passed. The stripped helper measures 883,504 bytes.
+
+## Stopping point for this reduction
+
+The remaining 15 source files serve the supported path:
+
+- `Server.swift`, `Messages.swift`, `ID.swift`, `Error.swift`: request dispatch, response/error encoding, batching and cancellation tracking.
+- `Lifecycle.swift`, `Versioning.swift`, `Client.swift`, `Icon.swift`: standard initialization and client identity metadata, including future capabilities.
+- `Tools.swift`, `Value.swift`, `Utilities/Progress.swift`: tool schemas/results and arbitrary JSON/request metadata. Progress notifications are omitted, but incoming metadata remains decodable.
+- `Utilities/Cancellation.swift`, `Utilities/Ping.swift`: client cancellation and connection health checks.
+- `Transport.swift`, `Transports/StdioTransport.swift`: upstream framing, partial I/O, EOF and nonblocking descriptor handling.
+
+Keep swift-system for FileDescriptor/Errno and swift-log for upstream diagnostics. Neither is an HTTP dependency. Keep shared Codable/conformance helpers and older-version batch handling: removing individual convenience methods or replacing generic dispatch would expand the fork for little benefit. Capture's app-side automation validates permissions, document revisions and mutations and is not duplicated MCP transport code. Future functional changes may change this boundary; review actual usage before retaining or deleting code.
+
+## Final progressive-cleanup verification (October 31, 2026)
+
+The final retained SDK has 15 Swift source files and 2,723 lines. All six focused SDK tests, 41 Xcode core tests, native window checks and release-workflow/publication checks passed. The actual Xcode Release-bundle helper passed full protocol/lifecycle and installed Codex discovery checks (13 tools). An isolated stripped, ad-hoc-signed Release app launched successfully. Native verification images were regenerated under `artifacts/verification/`; `text-background-committed.png` was visually reviewed.
+
+The exact source patch reverses every retained file to the recorded upstream baseline and reapplies byte-for-byte. Unstripped production symbols contain none of the removed HTTP/network/in-memory transports, EventSource, URL elicitation model or compatibility wrapper. The app, framework and helper are arm64-only, all dSYM UUIDs match, and the upstream license is bundled.
+
+| Comparable local test artifact | Before progressive cleanup | Final |
+|---|---:|---:|
+| Stripped arm64 helper | 1,677,464 bytes | 883,504 bytes |
+| Entire stripped app, including license | 2,829,251 bytes (initial subset adoption) | 1,981,621 bytes |
+
+The helper is 47.3% smaller than the start of this cleanup. Bundle/signature sizes can vary slightly with distribution signing. All cleanup code and maintenance changes are committed; the pre-existing user-built `web-page/release.json` and `web-page/Capture.dmg.sha256` modifications are intentionally excluded. Rebuild with `make release` before shipping these changes. This verification does not notarize, publish, push, merge or deploy a release.
