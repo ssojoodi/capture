@@ -60,22 +60,6 @@ public actor Server {
 
     /// Server capabilities
     public struct Capabilities: Hashable, Codable, Sendable {
-        /// Resources capabilities
-        public struct Resources: Hashable, Codable, Sendable {
-            /// Whether the resource can be subscribed to
-            public var subscribe: Bool?
-            /// Whether the list of resources has changed
-            public var listChanged: Bool?
-
-            public init(
-                subscribe: Bool? = nil,
-                listChanged: Bool? = nil
-            ) {
-                self.subscribe = subscribe
-                self.listChanged = listChanged
-            }
-        }
-
         /// Tools capabilities
         public struct Tools: Hashable, Codable, Sendable {
             /// Whether the server notifies clients when tools change
@@ -86,53 +70,11 @@ public actor Server {
             }
         }
 
-        /// Prompts capabilities
-        public struct Prompts: Hashable, Codable, Sendable {
-            /// Whether the server notifies clients when prompts change
-            public var listChanged: Bool?
-
-            public init(listChanged: Bool? = nil) {
-                self.listChanged = listChanged
-            }
-        }
-
-        /// Logging capabilities
-        public struct Logging: Hashable, Codable, Sendable {
-            public init() {}
-        }
-
-        /// Completions capabilities
-        public struct Completions: Hashable, Codable, Sendable {
-            public init() {}
-        }
-
-        /// Completions capabilities
-        public var completions: Completions?
-        /// Logging capabilities
-        public var logging: Logging?
-        /// Prompts capabilities
-        public var prompts: Prompts?
-        /// Resources capabilities
-        public var resources: Resources?
-        /// Tools capabilities
         public var tools: Tools?
-
-        public init(
-            completions: Completions? = nil,
-            logging: Logging? = nil,
-            prompts: Prompts? = nil,
-            resources: Resources? = nil,
-            tools: Tools? = nil
-        ) {
-            self.completions = completions
-            self.logging = logging
-            self.prompts = prompts
-            self.resources = resources
-            self.tools = tools
-        }
+        public init(tools: Tools? = nil) { self.tools = tools }
     }
 
-    /// Server information
+    /// Server implementation information
     private let serverInfo: Server.Info
     /// The server connection
     private var connection: (any Transport)?
@@ -170,12 +112,6 @@ public actor Server {
 
     /// Whether the server is initialized
     private var isInitialized = false
-    /// The client information
-    private var clientInfo: Client.Info?
-    /// The client capabilities
-    private var clientCapabilities: Client.Capabilities?
-    /// The protocol version
-    private var protocolVersion: String?
     /// The task for the message handling loop
     private var task: Task<Void, Never>?
 
@@ -196,13 +132,11 @@ public actor Server {
     /// Start the server
     /// - Parameters:
     ///   - transport: The transport to use for the server
-    ///   - initializeHook: An optional hook that runs when the client sends an initialize request
     public func start(
-        transport: any Transport,
-        initializeHook: (@Sendable (Client.Info, Client.Capabilities) async throws -> Void)? = nil
+        transport: any Transport
     ) async throws {
         self.connection = transport
-        registerDefaultHandlers(initializeHook: initializeHook)
+        registerDefaultHandlers()
         registerCancellationHandler()
         try await transport.connect()
 
@@ -538,9 +472,7 @@ public actor Server {
         }
     }
 
-    private func registerDefaultHandlers(
-        initializeHook: (@Sendable (Client.Info, Client.Capabilities) async throws -> Void)?
-    ) {
+    private func registerDefaultHandlers() {
         // Initialize
         withMethodHandler(Initialize.self) { [weak self] params in
             guard let self = self else {
@@ -551,22 +483,12 @@ public actor Server {
                 throw MCPError.invalidRequest("Server is already initialized")
             }
 
-            // Call initialization hook if registered
-            if let hook = initializeHook {
-                try await hook(params.clientInfo, params.capabilities)
-            }
-
             // Perform version negotiation
             let clientRequestedVersion = params.protocolVersion
             let negotiatedProtocolVersion = Version.negotiate(
                 clientRequestedVersion: clientRequestedVersion)
 
-            // Set initial state with the negotiated protocol version
-            await self.setInitialState(
-                clientInfo: params.clientInfo,
-                clientCapabilities: params.capabilities,
-                protocolVersion: negotiatedProtocolVersion
-            )
+            await self.setInitialized()
 
             return Initialize.Result(
                 protocolVersion: negotiatedProtocolVersion,
@@ -580,16 +502,7 @@ public actor Server {
         withMethodHandler(Ping.self) { _ in return Empty() }
     }
 
-    private func setInitialState(
-        clientInfo: Client.Info,
-        clientCapabilities: Client.Capabilities,
-        protocolVersion: String
-    ) async {
-        self.clientInfo = clientInfo
-        self.clientCapabilities = clientCapabilities
-        self.protocolVersion = protocolVersion
-        self.isInitialized = true
-    }
+    private func setInitialized() { isInitialized = true }
 
     /// Cancel and remove a pending request task
     private func removePendingRequest(id: ID) -> Task<Response<AnyMethod>, Error>? {

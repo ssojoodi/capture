@@ -94,3 +94,19 @@ private func waitFor(_ predicate: () async -> Bool) async throws {
     let expected = try JSONDecoder().decode([String: Value].self, from: JSONSerialization.data(withJSONObject: object["capabilities"]!))
     #expect(parameters.capabilities == expected)
 }
+
+@Test func toolWireFormatPreservesCaptureOutputsAndMetadata() throws {
+    let json = #"{"content":[{"type":"text","text":"done","_meta":{"source":"Capture"}},{"type":"image","data":"cG5n","mimeType":"image/png"}],"structuredContent":{"revision":2},"isError":false}"#
+    let result = try JSONDecoder().decode(CallTool.Result.self, from: Data(json.utf8))
+    let encoded = try JSONEncoder().encode(result)
+    #expect(try JSONDecoder().decode(Value.self, from: encoded) == JSONDecoder().decode(Value.self, from: Data(json.utf8)))
+    let toolJSON = #"{"name":"preview","description":"Preview","inputSchema":{},"annotations":{"readOnlyHint":true,"destructiveHint":false}}"#
+    let tool = try JSONDecoder().decode(Tool.self, from: Data(toolJSON.utf8))
+    let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(tool)) as! [String: Any]
+    let hints = object["annotations"] as! [String: Any]
+    #expect(hints["readOnlyHint"] as? Bool == true)
+    #expect(hints["destructiveHint"] as? Bool == false)
+    let request = #"{"name":"preview","_meta":{"progressToken":"request-1","custom":{"enabled":true}}}"#
+    let parameters = try JSONDecoder().decode(CallTool.Parameters.self, from: Data(request.utf8))
+    #expect(try JSONDecoder().decode(Value.self, from: JSONEncoder().encode(parameters)) == JSONDecoder().decode(Value.self, from: Data(request.utf8)))
+}

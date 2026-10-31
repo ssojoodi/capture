@@ -1,3 +1,4 @@
+// Modified for Capture: retain text/image tool content; omit unsupported outputs and legacy factories.
 import Foundation
 
 /// The Model Context Protocol (MCP) allows servers to expose tools
@@ -114,71 +115,11 @@ public struct Tool: Hashable, Codable, Sendable {
     /// Content types that can be returned by a tool
     public enum Content: Hashable, Codable, Sendable {
         /// Text content
-        case text(text: String, annotations: Resource.Annotations?, _meta: Metadata?)
+        case text(text: String, _meta: Metadata?)
         /// Image content
-        case image(data: String, mimeType: String, annotations: Resource.Annotations?, _meta: Metadata?)
-        /// Audio content
-        case audio(data: String, mimeType: String, annotations: Resource.Annotations?, _meta: Metadata?)
-        /// Embedded resource content (EmbeddedResource from spec)
-        case resource(resource: Resource.Content, annotations: Resource.Annotations? = nil, _meta: Metadata? = nil)
-        /// Resource link
-        case resourceLink(
-            uri: String, name: String, title: String? = nil, description: String? = nil,
-            mimeType: String? = nil,
-            annotations: Resource.Annotations? = nil
-        )
-
-        /// Deprecated compatibility factory for older call sites that used `.text("...")` and `.text("...", metadata: ...)`.
-        @available(*, deprecated, message: "Use .text(text:annotations:_meta:) instead.")
-        public static func text(_ text: String, metadata: Metadata? = nil) -> Self {
-            .text(text: text, annotations: nil, _meta: metadata)
-        }
-
-        /// Deprecated compatibility factory for older call sites that used `.text(text: ..., metadata: ...)`.
-        @available(*, deprecated, message: "Use .text(text:annotations:_meta:) instead.")
-        public static func text(text: String, metadata: Metadata? = nil) -> Self {
-            .text(text: text, annotations: nil, _meta: metadata)
-        }
-
-        /// Deprecated compatibility factory for older call sites that used `.image(..., metadata: ...)`.
-        @available(*, deprecated, message: "Use .image(data:mimeType:annotations:_meta:) instead.")
-        public static func image(_ data: String, _ mimeType: String, metadata: Metadata? = nil) -> Self {
-            .image(data: data, mimeType: mimeType, annotations: nil, _meta: metadata)
-        }
-
-        /// Deprecated compatibility factory for older call sites that used `.image(data:mimeType:metadata:)`.
-        @available(*, deprecated, message: "Use .image(data:mimeType:annotations:_meta:) instead.")
-        public static func image(data: String, mimeType: String, metadata: Metadata? = nil) -> Self {
-            .image(data: data, mimeType: mimeType, annotations: nil, _meta: metadata)
-        }
-
-        /// Deprecated compatibility factory for older call sites that used `.audio(..., metadata: ...)`.
-        @available(*, deprecated, message: "Use .audio(data:mimeType:annotations:_meta:) instead.")
-        public static func audio(_ data: String, _ mimeType: String, metadata: Metadata? = nil) -> Self {
-            .audio(data: data, mimeType: mimeType, annotations: nil, _meta: metadata)
-        }
-
-        /// Deprecated compatibility factory for older call sites that used `.audio(data:mimeType:metadata:)`.
-        @available(*, deprecated, message: "Use .audio(data:mimeType:annotations:_meta:) instead.")
-        public static func audio(data: String, mimeType: String, metadata: Metadata? = nil) -> Self {
-            .audio(data: data, mimeType: mimeType, annotations: nil, _meta: metadata)
-        }
-
+        case image(data: String, mimeType: String, _meta: Metadata?)
         private enum CodingKeys: String, CodingKey {
-            case type
-            case text
-            case image
-            case resource
-            case resource_link
-            case audio
-            case uri
-            case name
-            case title
-            case description
-            case annotations
-            case mimeType
-            case data
-            case _meta
+            case type, text, data, mimeType, _meta
         }
 
         public init(from decoder: Decoder) throws {
@@ -188,37 +129,13 @@ public struct Tool: Hashable, Codable, Sendable {
             switch type {
             case "text":
                 let text = try container.decode(String.self, forKey: .text)
-                let annotations = try container.decodeIfPresent(Resource.Annotations.self, forKey: .annotations)
                 let _meta = try container.decodeIfPresent(Metadata.self, forKey: ._meta)
-                self = .text(text: text, annotations: annotations, _meta: _meta)
+                self = .text(text: text, _meta: _meta)
             case "image":
                 let data = try container.decode(String.self, forKey: .data)
                 let mimeType = try container.decode(String.self, forKey: .mimeType)
-                let annotations = try container.decodeIfPresent(Resource.Annotations.self, forKey: .annotations)
                 let _meta = try container.decodeIfPresent(Metadata.self, forKey: ._meta)
-                self = .image(data: data, mimeType: mimeType, annotations: annotations, _meta: _meta)
-            case "audio":
-                let data = try container.decode(String.self, forKey: .data)
-                let mimeType = try container.decode(String.self, forKey: .mimeType)
-                let annotations = try container.decodeIfPresent(Resource.Annotations.self, forKey: .annotations)
-                let _meta = try container.decodeIfPresent(Metadata.self, forKey: ._meta)
-                self = .audio(data: data, mimeType: mimeType, annotations: annotations, _meta: _meta)
-            case "resource":
-                let resourceContent = try container.decode(Resource.Content.self, forKey: .resource)
-                let annotations = try container.decodeIfPresent(Resource.Annotations.self, forKey: .annotations)
-                let _meta = try container.decodeIfPresent(Metadata.self, forKey: ._meta)
-                self = .resource(resource: resourceContent, annotations: annotations, _meta: _meta)
-            case "resource_link":
-                let uri = try container.decode(String.self, forKey: .uri)
-                let name = try container.decode(String.self, forKey: .name)
-                let title = try container.decodeIfPresent(String.self, forKey: .title)
-                let description = try container.decodeIfPresent(String.self, forKey: .description)
-                let mimeType = try container.decodeIfPresent(String.self, forKey: .mimeType)
-                let annotations = try container.decodeIfPresent(
-                    Resource.Annotations.self, forKey: .annotations)
-                self = .resourceLink(
-                    uri: uri, name: name, title: title, description: description,
-                    mimeType: mimeType, annotations: annotations)
+                self = .image(data: data, mimeType: mimeType, _meta: _meta)
             default:
                 throw DecodingError.dataCorruptedError(
                     forKey: .type, in: container, debugDescription: "Unknown tool content type")
@@ -229,37 +146,16 @@ public struct Tool: Hashable, Codable, Sendable {
             var container = encoder.container(keyedBy: CodingKeys.self)
 
             switch self {
-            case .text(let text, let annotations, let _meta):
+            case .text(let text, let _meta):
                 try container.encode("text", forKey: .type)
                 try container.encode(text, forKey: .text)
-                try container.encodeIfPresent(annotations, forKey: .annotations)
                 try container.encodeIfPresent(_meta, forKey: ._meta)
-            case .image(let data, let mimeType, let annotations, let _meta):
+            case .image(let data, let mimeType, let _meta):
                 try container.encode("image", forKey: .type)
                 try container.encode(data, forKey: .data)
                 try container.encode(mimeType, forKey: .mimeType)
-                try container.encodeIfPresent(annotations, forKey: .annotations)
                 try container.encodeIfPresent(_meta, forKey: ._meta)
-            case .audio(let data, let mimeType, let annotations, let _meta):
-                try container.encode("audio", forKey: .type)
-                try container.encode(data, forKey: .data)
-                try container.encode(mimeType, forKey: .mimeType)
-                try container.encodeIfPresent(annotations, forKey: .annotations)
-                try container.encodeIfPresent(_meta, forKey: ._meta)
-            case .resource(let resourceContent, let annotations, let _meta):
-                try container.encode("resource", forKey: .type)
-                try container.encode(resourceContent, forKey: .resource)
-                try container.encodeIfPresent(annotations, forKey: .annotations)
-                try container.encodeIfPresent(_meta, forKey: ._meta)
-            case .resourceLink(
-                let uri, let name, let title, let description, let mimeType, let annotations):
-                try container.encode("resource_link", forKey: .type)
-                try container.encode(uri, forKey: .uri)
-                try container.encode(name, forKey: .name)
-                try container.encodeIfPresent(title, forKey: .title)
-                try container.encodeIfPresent(description, forKey: .description)
-                try container.encodeIfPresent(mimeType, forKey: .mimeType)
-                try container.encodeIfPresent(annotations, forKey: .annotations)
+
             }
         }
     }
@@ -457,10 +353,4 @@ public enum CallTool: Method {
             _meta = try container.decodeIfPresent(Metadata.self, forKey: ._meta)
         }
     }
-}
-
-/// When the list of available tools changes, servers that declared the listChanged capability SHOULD send a notification:
-/// - SeeAlso: https://spec.modelcontextprotocol.io/specification/2025-06-18/server/tools/#list-changed-notification
-public struct ToolListChangedNotification: Notification {
-    public static let name: String = "notifications/tools/list_changed"
 }

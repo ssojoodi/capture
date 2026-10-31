@@ -9,7 +9,7 @@ Capture uses the pinned stdio-only SDK in `Vendor/swift-sdk` as its production d
 - Upstream: `https://github.com/modelcontextprotocol/swift-sdk.git`
 - Tested version: `0.12.1`
 - Tested revision: `a0ae212ebf6eab5f754c3129608bc5557637e605`
-- Retained MCP source: 18 Swift files; exact counts vary with the recorded patch.
+- Retained MCP source: 16 Swift files; exact counts vary with the recorded patch.
 - Required dependencies: `swift-log` and `swift-system`.
 - EventSource is unnecessary for the subset. NIO is not linked into Capture's existing helper; its appearance in dependency resolution does not imply shipped code.
 
@@ -25,7 +25,7 @@ Base/Transports/InMemoryTransport.swift
 Base/Transports/HTTPServer/
 ```
 
-`Server.swift` removes the unused HTTP handler context, its task-local storage and the transport cast. Request handling and cancellation remain intact. The entire HTTPServer directory is omitted. Both Client.swift and Server.swift changes are recorded in `stdio-only.patch`.
+`Server.swift` removes the unused HTTP handler context, its task-local storage and the transport cast. Request handling and cancellation remain intact. The entire HTTPServer directory is omitted. All retained source changes are recorded in `stdio-only.patch`.
 
 `Client.swift` retains only the upstream identity and capability models needed to decode initialization. The outbound client actor, configuration, connection loop, request APIs and handlers are omitted. These deletions are recorded in `stdio-only.patch`; Capture never connects to another MCP server.
 
@@ -115,3 +115,11 @@ The tools-only server stage passed the new direct cancellation/error tests, full
 Client capabilities are retained as `[String: Value]`: Capture never calls them and must accept arbitrary experimental/future JSON. The obsolete CompatibleStdioTransport normalization wrapper is removed; the helper uses upstream StdioTransport directly. Root Package.swift no longer declares swift-log directly; the SDK still uses it for diagnostics. Test arbitrary capability preservation and real Codex initialization on upgrades.
 
 The initialization simplification passed three SDK boundary tests (including exact arbitrary capability preservation), full stripped-helper protocol/lifecycle tests and installed Codex discovery. The stripped helper is 1,078,576 bytes. Only the SDK, not the Capture helper, directly depends on Logging now.
+
+### Capture tool output subset
+
+`Tools.swift` retains text, image and structured tool results, tool safety annotations, and request/result metadata. Unused audio, embedded-resource and resource-link content models and tool-list-change notifications are omitted. Capture advertises a fixed tools list and never returns those content types. `Server.swift` retains only the advertised tools capability; unused initialization hooks and write-only client state are omitted.
+
+Additional omitted paths are `Server/Resources.swift` and `Base/UnitInterval.swift`. The latter was needed only by the removed sampling/resource models. The source patch records all edits to retained files. Boundary tests verify text/image wire formats, structured results, safety hints and arbitrary request metadata alongside cancellation and initialization.
+
+This stage passed all four SDK boundary tests, full stripped-helper protocol/lifecycle checks and installed Codex discovery. The stripped arm64 helper measures 927,312 bytes, down from 1,078,576.

@@ -1179,18 +1179,102 @@
 +// Modified for Capture: tools-only server; unused HTTP and outbound APIs removed. See stdio-only.patch.
 @@ -4 +4,0 @@
 -import struct Foundation.Date
-@@ -171,3 +170,0 @@
+@@ -63,16 +62,0 @@
+-        /// Resources capabilities
+-        public struct Resources: Hashable, Codable, Sendable {
+-            /// Whether the resource can be subscribed to
+-            public var subscribe: Bool?
+-            /// Whether the list of resources has changed
+-            public var listChanged: Bool?
+-
+-            public init(
+-                subscribe: Bool? = nil,
+-                listChanged: Bool? = nil
+-            ) {
+-                self.subscribe = subscribe
+-                self.listChanged = listChanged
+-            }
+-        }
+-
+@@ -89,29 +72,0 @@
+-        /// Prompts capabilities
+-        public struct Prompts: Hashable, Codable, Sendable {
+-            /// Whether the server notifies clients when prompts change
+-            public var listChanged: Bool?
+-
+-            public init(listChanged: Bool? = nil) {
+-                self.listChanged = listChanged
+-            }
+-        }
+-
+-        /// Logging capabilities
+-        public struct Logging: Hashable, Codable, Sendable {
+-            public init() {}
+-        }
+-
+-        /// Completions capabilities
+-        public struct Completions: Hashable, Codable, Sendable {
+-            public init() {}
+-        }
+-
+-        /// Completions capabilities
+-        public var completions: Completions?
+-        /// Logging capabilities
+-        public var logging: Logging?
+-        /// Prompts capabilities
+-        public var prompts: Prompts?
+-        /// Resources capabilities
+-        public var resources: Resources?
+-        /// Tools capabilities
+@@ -119,17 +74,4 @@
+-
+-        public init(
+-            completions: Completions? = nil,
+-            logging: Logging? = nil,
+-            prompts: Prompts? = nil,
+-            resources: Resources? = nil,
+-            tools: Tools? = nil
+-        ) {
+-            self.completions = completions
+-            self.logging = logging
+-            self.prompts = prompts
+-            self.resources = resources
+-            self.tools = tools
+-        }
+-    }
+-
+-    /// Server information
++        public init(tools: Tools? = nil) { self.tools = tools }
++    }
++
++    /// Server implementation information
+@@ -171,3 +112,0 @@
 -    /// Pending requests sent to the client, awaiting responses
 -    private var pendingRequests: [ID: AnyPendingRequest] = [:]
 -
-@@ -182,2 +178,0 @@
+@@ -176,8 +114,0 @@
+-    /// The client information
+-    private var clientInfo: Client.Info?
+-    /// The client capabilities
+-    private var clientCapabilities: Client.Capabilities?
+-    /// The protocol version
+-    private var protocolVersion: String?
 -    /// The list of subscriptions
 -    private var subscriptions: [String: Set<ID>] = [:]
-@@ -232 +227,2 @@
+@@ -204 +134,0 @@
+-    ///   - initializeHook: An optional hook that runs when the client sends an initialize request
+@@ -206,2 +136 @@
+-        transport: any Transport,
+-        initializeHook: (@Sendable (Client.Info, Client.Capabilities) async throws -> Void)? = nil
++        transport: any Transport
+@@ -210 +139 @@
+-        registerDefaultHandlers(initializeHook: initializeHook)
++        registerDefaultHandlers()
+@@ -232 +161,2 @@
 -                            await handleResponse(response)
 +                            // Capture never sends requests to clients; ignore unsolicited responses.
 +                            _ = response
-@@ -282,7 +277,0 @@
+@@ -282,7 +211,0 @@
 -        // Clear pending requests with errors
 -        let pendingRequestsToCancel = self.pendingRequests
 -        self.pendingRequests = [:]
@@ -1198,7 +1282,7 @@
 -            request.resume(throwing: MCPError.internalError("Server disconnected"))
 -        }
 -
-@@ -298,38 +286,0 @@
+@@ -298,38 +220,0 @@
 -
 -    // MARK: - Request Context
 -
@@ -1237,7 +1321,7 @@
 -    /// Task.detached { await doWork(with: ctx?.httpContext) }
 -    /// ```
 -    @TaskLocal public static var currentHandlerContext: HandlerContext? = nil
-@@ -376,284 +326,0 @@
+@@ -376,284 +260,0 @@
 -    }
 -
 -    /// Send a notification to connected clients
@@ -1522,7 +1606,7 @@
 -        let request = ListRoots.request()
 -        let result = try await sendAndAwait(request)
 -        return result.roots
-@@ -781,7 +447,0 @@
+@@ -781,7 +381,0 @@
 -        // Ask the transport for the originating HTTP request so handlers can observe
 -        // headers/auth via `Server.currentHandlerContext?.httpContext`. Transports
 -        // that don't carry HTTP context (stdio, in-memory) don't conform.
@@ -1530,7 +1614,7 @@
 -            .httpRequestContext(for: request.id)
 -        let handlerContext = HandlerContext(id: request.id, httpContext: httpContext)
 -
-@@ -789,23 +449,19 @@
+@@ -789,23 +383,19 @@
 -        // Set currentHandlerContext as a task local so handlers see it.
 -        var handlerTask: Task<Response<AnyMethod>, Error>!
 -        Server.$currentHandlerContext.withValue(handlerContext) {
@@ -1573,7 +1657,7 @@
 +                let mcpError =
 +                    error as? MCPError ?? MCPError.internalError(error.localizedDescription)
 +                return AnyMethod.response(id: request.id, error: mcpError)
-@@ -879,16 +534,0 @@
+@@ -879,16 +468,0 @@
 -    private func handleResponse(_ response: Response<AnyMethod>) async {
 -        if let pendingRequest = self.removePendingResponse(id: response.id) {
 -            switch response.result {
@@ -1590,10 +1674,7 @@
 -        }
 -    }
 -
-@@ -898,18 +537,0 @@
--        }
--    }
--
+@@ -901,21 +475 @@
 -    /// Validate the client capabilities.
 -    /// Throws an error if the server is configured to be strict and the capability is not supported.
 -    private func validateClientCapability<T>(
@@ -1609,7 +1690,40 @@
 -            guard capabilities[keyPath: keyPath] != nil else {
 -                throw MCPError.methodNotFound("\(name) is not supported by the client")
 -            }
-@@ -1018,23 +640 @@
+-        }
+-    }
+-
+-    private func registerDefaultHandlers(
+-        initializeHook: (@Sendable (Client.Info, Client.Capabilities) async throws -> Void)?
+-    ) {
++    private func registerDefaultHandlers() {
+@@ -932,5 +485,0 @@
+-            // Call initialization hook if registered
+-            if let hook = initializeHook {
+-                try await hook(params.clientInfo, params.capabilities)
+-            }
+-
+@@ -942,6 +491 @@
+-            // Set initial state with the negotiated protocol version
+-            await self.setInitialState(
+-                clientInfo: params.clientInfo,
+-                clientCapabilities: params.capabilities,
+-                protocolVersion: negotiatedProtocolVersion
+-            )
++            await self.setInitialized()
+@@ -961,10 +505 @@
+-    private func setInitialState(
+-        clientInfo: Client.Info,
+-        clientCapabilities: Client.Capabilities,
+-        protocolVersion: String
+-    ) async {
+-        self.clientInfo = clientInfo
+-        self.clientCapabilities = clientCapabilities
+-        self.protocolVersion = protocolVersion
+-        self.isInitialized = true
+-    }
++    private func setInitialized() { isInitialized = true }
+@@ -1018,23 +553 @@
 -    /// Cancel a request by sending a CancelledNotification to the client.
 -    ///
 -    /// This is used when the server needs to cancel an in-progress request it made to the client
@@ -1634,3 +1748,147 @@
 -        try await notify(notification)
 -    }
 +
+--- a/Sources/MCP/Server/Tools.swift
++++ b/Sources/MCP/Server/Tools.swift
+@@ -0,0 +1 @@
++// Modified for Capture: retain text/image tool content; omit unsupported outputs and legacy factories.
+@@ -117 +118 @@
+-        case text(text: String, annotations: Resource.Annotations?, _meta: Metadata?)
++        case text(text: String, _meta: Metadata?)
+@@ -119,48 +120 @@
+-        case image(data: String, mimeType: String, annotations: Resource.Annotations?, _meta: Metadata?)
+-        /// Audio content
+-        case audio(data: String, mimeType: String, annotations: Resource.Annotations?, _meta: Metadata?)
+-        /// Embedded resource content (EmbeddedResource from spec)
+-        case resource(resource: Resource.Content, annotations: Resource.Annotations? = nil, _meta: Metadata? = nil)
+-        /// Resource link
+-        case resourceLink(
+-            uri: String, name: String, title: String? = nil, description: String? = nil,
+-            mimeType: String? = nil,
+-            annotations: Resource.Annotations? = nil
+-        )
+-
+-        /// Deprecated compatibility factory for older call sites that used `.text("...")` and `.text("...", metadata: ...)`.
+-        @available(*, deprecated, message: "Use .text(text:annotations:_meta:) instead.")
+-        public static func text(_ text: String, metadata: Metadata? = nil) -> Self {
+-            .text(text: text, annotations: nil, _meta: metadata)
+-        }
+-
+-        /// Deprecated compatibility factory for older call sites that used `.text(text: ..., metadata: ...)`.
+-        @available(*, deprecated, message: "Use .text(text:annotations:_meta:) instead.")
+-        public static func text(text: String, metadata: Metadata? = nil) -> Self {
+-            .text(text: text, annotations: nil, _meta: metadata)
+-        }
+-
+-        /// Deprecated compatibility factory for older call sites that used `.image(..., metadata: ...)`.
+-        @available(*, deprecated, message: "Use .image(data:mimeType:annotations:_meta:) instead.")
+-        public static func image(_ data: String, _ mimeType: String, metadata: Metadata? = nil) -> Self {
+-            .image(data: data, mimeType: mimeType, annotations: nil, _meta: metadata)
+-        }
+-
+-        /// Deprecated compatibility factory for older call sites that used `.image(data:mimeType:metadata:)`.
+-        @available(*, deprecated, message: "Use .image(data:mimeType:annotations:_meta:) instead.")
+-        public static func image(data: String, mimeType: String, metadata: Metadata? = nil) -> Self {
+-            .image(data: data, mimeType: mimeType, annotations: nil, _meta: metadata)
+-        }
+-
+-        /// Deprecated compatibility factory for older call sites that used `.audio(..., metadata: ...)`.
+-        @available(*, deprecated, message: "Use .audio(data:mimeType:annotations:_meta:) instead.")
+-        public static func audio(_ data: String, _ mimeType: String, metadata: Metadata? = nil) -> Self {
+-            .audio(data: data, mimeType: mimeType, annotations: nil, _meta: metadata)
+-        }
+-
+-        /// Deprecated compatibility factory for older call sites that used `.audio(data:mimeType:metadata:)`.
+-        @available(*, deprecated, message: "Use .audio(data:mimeType:annotations:_meta:) instead.")
+-        public static func audio(data: String, mimeType: String, metadata: Metadata? = nil) -> Self {
+-            .audio(data: data, mimeType: mimeType, annotations: nil, _meta: metadata)
+-        }
+-
++        case image(data: String, mimeType: String, _meta: Metadata?)
+@@ -168,14 +122 @@
+-            case type
+-            case text
+-            case image
+-            case resource
+-            case resource_link
+-            case audio
+-            case uri
+-            case name
+-            case title
+-            case description
+-            case annotations
+-            case mimeType
+-            case data
+-            case _meta
++            case type, text, data, mimeType, _meta
+@@ -191 +131,0 @@
+-                let annotations = try container.decodeIfPresent(Resource.Annotations.self, forKey: .annotations)
+@@ -193 +133 @@
+-                self = .text(text: text, annotations: annotations, _meta: _meta)
++                self = .text(text: text, _meta: _meta)
+@@ -197 +136,0 @@
+-                let annotations = try container.decodeIfPresent(Resource.Annotations.self, forKey: .annotations)
+@@ -199,23 +138 @@
+-                self = .image(data: data, mimeType: mimeType, annotations: annotations, _meta: _meta)
+-            case "audio":
+-                let data = try container.decode(String.self, forKey: .data)
+-                let mimeType = try container.decode(String.self, forKey: .mimeType)
+-                let annotations = try container.decodeIfPresent(Resource.Annotations.self, forKey: .annotations)
+-                let _meta = try container.decodeIfPresent(Metadata.self, forKey: ._meta)
+-                self = .audio(data: data, mimeType: mimeType, annotations: annotations, _meta: _meta)
+-            case "resource":
+-                let resourceContent = try container.decode(Resource.Content.self, forKey: .resource)
+-                let annotations = try container.decodeIfPresent(Resource.Annotations.self, forKey: .annotations)
+-                let _meta = try container.decodeIfPresent(Metadata.self, forKey: ._meta)
+-                self = .resource(resource: resourceContent, annotations: annotations, _meta: _meta)
+-            case "resource_link":
+-                let uri = try container.decode(String.self, forKey: .uri)
+-                let name = try container.decode(String.self, forKey: .name)
+-                let title = try container.decodeIfPresent(String.self, forKey: .title)
+-                let description = try container.decodeIfPresent(String.self, forKey: .description)
+-                let mimeType = try container.decodeIfPresent(String.self, forKey: .mimeType)
+-                let annotations = try container.decodeIfPresent(
+-                    Resource.Annotations.self, forKey: .annotations)
+-                self = .resourceLink(
+-                    uri: uri, name: name, title: title, description: description,
+-                    mimeType: mimeType, annotations: annotations)
++                self = .image(data: data, mimeType: mimeType, _meta: _meta)
+@@ -232 +149 @@
+-            case .text(let text, let annotations, let _meta):
++            case .text(let text, let _meta):
+@@ -235 +151,0 @@
+-                try container.encodeIfPresent(annotations, forKey: .annotations)
+@@ -237 +153 @@
+-            case .image(let data, let mimeType, let annotations, let _meta):
++            case .image(let data, let mimeType, let _meta):
+@@ -241 +156,0 @@
+-                try container.encodeIfPresent(annotations, forKey: .annotations)
+@@ -243,20 +158 @@
+-            case .audio(let data, let mimeType, let annotations, let _meta):
+-                try container.encode("audio", forKey: .type)
+-                try container.encode(data, forKey: .data)
+-                try container.encode(mimeType, forKey: .mimeType)
+-                try container.encodeIfPresent(annotations, forKey: .annotations)
+-                try container.encodeIfPresent(_meta, forKey: ._meta)
+-            case .resource(let resourceContent, let annotations, let _meta):
+-                try container.encode("resource", forKey: .type)
+-                try container.encode(resourceContent, forKey: .resource)
+-                try container.encodeIfPresent(annotations, forKey: .annotations)
+-                try container.encodeIfPresent(_meta, forKey: ._meta)
+-            case .resourceLink(
+-                let uri, let name, let title, let description, let mimeType, let annotations):
+-                try container.encode("resource_link", forKey: .type)
+-                try container.encode(uri, forKey: .uri)
+-                try container.encode(name, forKey: .name)
+-                try container.encodeIfPresent(title, forKey: .title)
+-                try container.encodeIfPresent(description, forKey: .description)
+-                try container.encodeIfPresent(mimeType, forKey: .mimeType)
+-                try container.encodeIfPresent(annotations, forKey: .annotations)
++
+@@ -461,6 +356,0 @@
+-
+-/// When the list of available tools changes, servers that declared the listChanged capability SHOULD send a notification:
+-/// - SeeAlso: https://spec.modelcontextprotocol.io/specification/2025-06-18/server/tools/#list-changed-notification
+-public struct ToolListChangedNotification: Notification {
+-    public static let name: String = "notifications/tools/list_changed"
+-}
