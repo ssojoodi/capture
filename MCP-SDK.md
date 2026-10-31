@@ -27,15 +27,7 @@ Base/Transports/HTTPServer/
 
 `Server.swift` removes the unused HTTP handler context, its task-local storage and the transport cast. Request handling and cancellation remain intact. The entire HTTPServer directory is omitted. Both Client.swift and Server.swift changes are recorded in `stdio-only.patch`.
 
-In `Sources/MCP/Client/Client.swift`, retain the Capture modification notice and remove only this HTTP-specific hook from initialization:
-
-```swift
-// For HTTP transport, ensure subsequent MCP-Protocol-Version headers
-// reflect the negotiated lifecycle version.
-if let httpTransport = connection as? HTTPClientTransport {
-    await httpTransport.updateNegotiatedProtocolVersion(result.protocolVersion)
-}
-```
+`Client.swift` retains only the upstream identity and capability models needed to decode initialization. The outbound client actor, configuration, connection loop, request APIs and handlers are omitted. These deletions are recorded in `stdio-only.patch`; Capture never connects to another MCP server.
 
 The vendored SDK manifest exposes only the `MCP` library target, with Logging and SystemPackage dependencies and upstream StrictConcurrency enabled. Omit EventSource, documentation plugins, conformance executables and their NIO dependencies from that subset manifest. Keep client protocol types and other shared sources unless separately verified unnecessary.
 
@@ -94,3 +86,7 @@ The stripped arm64 -Osize helper measures 1,697,688 bytes (about 25 KB less than
 ## In-memory transport removal (October 31, 2026)
 
 Removed the unreferenced InMemoryTransport.swift; no extra source patch was required. StdioTransport is now the only retained concrete transport. Release build, full MCP protocol/lifecycle checks and installed Codex discovery passed. The stripped arm64 -Osize helper measures 1,677,464 bytes, saving a further 20,224 bytes compared with the HTTP-context cleanup. Rebuild release artifacts before shipping.
+
+## Outbound client removal (October 31, 2026)
+
+Removed the unused client runtime, retaining handshake types and capability decoders. Protocol checks now initialize with sampling, elicitation, roots and nested experimental capabilities. The stripped arm64 -Osize helper measures 1,518,704 bytes, down from 1,677,464. Full protocol/lifecycle checks and installed Codex discovery passed.
