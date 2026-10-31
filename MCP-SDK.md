@@ -9,7 +9,7 @@ Capture uses the pinned stdio-only SDK in `Vendor/swift-sdk` as its production d
 - Upstream: `https://github.com/modelcontextprotocol/swift-sdk.git`
 - Tested version: `0.12.1`
 - Tested revision: `a0ae212ebf6eab5f754c3129608bc5557637e605`
-- Retained MCP source: 26 Swift files; exact counts vary with the recorded patch.
+- Retained MCP source: 18 Swift files; exact counts vary with the recorded patch.
 - Required dependencies: `swift-log` and `swift-system`.
 - EventSource is unnecessary for the subset. NIO is not linked into Capture's existing helper; its appearance in dependency resolution does not imply shipped code.
 
@@ -90,3 +90,22 @@ Removed the unreferenced InMemoryTransport.swift; no extra source patch was requ
 ## Outbound client removal (October 31, 2026)
 
 Removed the unused client runtime, retaining handshake types and capability decoders. Protocol checks now initialize with sampling, elicitation, roots and nested experimental capabilities. The stripped arm64 -Osize helper measures 1,518,704 bytes, down from 1,677,464. Full protocol/lifecycle checks and installed Codex discovery passed.
+
+### Tools-only server reduction
+
+Capture does not send MCP requests to clients. Sampling, elicitation, roots, protocol log notifications, outbound request continuations and their cancellation sender are omitted. Inbound request cancellation, framing, negotiation, error responses and generic request dispatch are retained. Initialization capability models remain for decoding client metadata. Unused prompts/completion models are also omitted. Capture-owned boundary tests live in `Vendor/swift-sdk/Tests/CaptureSDKTests`; run `swift test --package-path Vendor/swift-sdk --scratch-path .build/mcp-sdk-tests`.
+
+Additional omitted source paths:
+
+- `Client/Sampling.swift`
+- `Client/Elicitation.swift`
+- `Client/Roots.swift`
+- `Server/Logging.swift`
+- `Server/Prompts.swift`
+- `Server/Completion.swift`
+- `Base/PendingRequest.swift`
+- `Base/Utilities/RequestContext.swift`
+
+`Progress.swift` retains upstream Metadata/ProgressToken decoding, but omits the unused emitted progress notification.
+
+The tools-only server stage passed the new direct cancellation/error tests, full stripped-helper protocol/lifecycle checks and actual Codex discovery. Its stripped arm64 -Osize helper is 1,127,328 bytes, down from 1,518,704.

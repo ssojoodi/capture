@@ -18,6 +18,7 @@ let package = Package(
                 .product(name: "SystemPackage", package: "swift-system")
             ],
             swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
-        )
+        ),
+        .testTarget(name: "CaptureSDKTests", dependencies: ["MCP", .product(name: "Logging", package: "swift-log")])
     ]
 )

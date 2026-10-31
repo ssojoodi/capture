@@ -21,3 +21,20 @@ Omitted source paths (relative to Sources/MCP):
 `Server.swift` removes the unused HTTP handler context, its task-local storage and the transport cast. Request handling and cancellation remain intact. The entire HTTPServer directory is omitted. Client.swift keeps initialization identity/capability types but omits the outbound client runtime. All Client.swift and Server.swift changes are recorded in `stdio-only.patch`.
 
 To refresh: obtain the recorded/new upstream revision, copy retained sources afresh, review and apply stdio-only.patch with `git apply --unidiff-zero`, then update this provenance and the root dependency lockfile. Do not modify SwiftPM checkout caches. Validate a clean build and the actual stripped helper as described in MCP-SDK.md.
+
+### Tools-only server reduction
+
+Capture does not send MCP requests to clients. Sampling, elicitation, roots, protocol log notifications, outbound request continuations and their cancellation sender are omitted. Inbound request cancellation, framing, negotiation, error responses and generic request dispatch are retained. Initialization capability models remain for decoding client metadata. Unused prompts/completion models are also omitted. Capture-owned boundary tests live in `Vendor/swift-sdk/Tests/CaptureSDKTests`; run `swift test --package-path Vendor/swift-sdk --scratch-path .build/mcp-sdk-tests`.
+
+Additional omitted source paths:
+
+- `Client/Sampling.swift`
+- `Client/Elicitation.swift`
+- `Client/Roots.swift`
+- `Server/Logging.swift`
+- `Server/Prompts.swift`
+- `Server/Completion.swift`
+- `Base/PendingRequest.swift`
+- `Base/Utilities/RequestContext.swift`
+
+`Progress.swift` retains upstream Metadata/ProgressToken decoding, but omits the unused emitted progress notification.
