@@ -1,3 +1,89 @@
+--- a/Sources/MCP/Base/Error.swift
++++ b/Sources/MCP/Base/Error.swift
+@@ -0,0 +1 @@
++// Modified for Capture: omit URL elicitation errors; Capture never initiates elicitation.
+@@ -8,19 +8,0 @@
+-
+-/// Information about a required URL elicitation
+-public struct URLElicitationInfo: Codable, Hashable, Sendable {
+-    /// Elicitation mode (must be "url")
+-    public var mode: String
+-    /// Unique identifier for this elicitation
+-    public var elicitationId: String
+-    /// URL for the user to visit
+-    public var url: String
+-    /// Message describing the elicitation
+-    public var message: String
+-
+-    public init(mode: String = "url", elicitationId: String, url: String, message: String) {
+-        self.mode = mode
+-        self.elicitationId = elicitationId
+-        self.url = url
+-        self.message = message
+-    }
+-}
+@@ -40,3 +21,0 @@
+-    // MCP specific errors
+-    case urlElicitationRequired(message: String, elicitations: [URLElicitationInfo])  // -32042
+-
+@@ -56 +34,0 @@
+-        case .urlElicitationRequired: return -32042
+@@ -94,2 +71,0 @@
+-        case .urlElicitationRequired(let message, _):
+-            return "URL elicitation required: \(message)"
+@@ -117,2 +92,0 @@
+-        case .urlElicitationRequired:
+-            return "The server requires user authentication or input via external URL"
+@@ -136,5 +109,0 @@
+-        case .urlElicitationRequired(_, let elicitations):
+-            if let first = elicitations.first {
+-                return "Visit \(first.url) to complete the required authentication or input"
+-            }
+-            return "Complete the required URL-based elicitation"
+@@ -190,16 +158,0 @@
+-        case .urlElicitationRequired(let message, let elicitations):
+-            // Encode the raw message so decode can round-trip without prefix doubling
+-            try container.encode(message, forKey: .message)
+-            // Encode elicitations array as structured data
+-            let elicitationsData = elicitations.map { info -> [String: Value] in
+-                return [
+-                    "mode": .string(info.mode),
+-                    "elicitationId": .string(info.elicitationId),
+-                    "url": .string(info.url),
+-                    "message": .string(info.message)
+-                ]
+-            }
+-            try container.encode(
+-                ["elicitations": Value.array(elicitationsData.map { .object($0) })],
+-                forKey: .data
+-            )
+@@ -241,19 +193,0 @@
+-        case -32042:
+-            // Extract elicitations array from data
+-            var elicitations: [URLElicitationInfo] = []
+-            if case .array(let items) = data?["elicitations"] {
+-                for item in items {
+-                    if case .object(let dict) = item,
+-                       case .string(let mode) = dict["mode"],
+-                       case .string(let elicitationId) = dict["elicitationId"],
+-                       case .string(let url) = dict["url"],
+-                       case .string(let msg) = dict["message"] {
+-                        elicitations.append(URLElicitationInfo(
+-                            mode: mode,
+-                            elicitationId: elicitationId,
+-                            url: url,
+-                            message: msg))
+-                    }
+-                }
+-            }
+-            self = .urlElicitationRequired(message: message, elicitations: elicitations)
+@@ -294,2 +227,0 @@
+-        case (.urlElicitationRequired(let m1, let e1), .urlElicitationRequired(let m2, let e2)):
+-            return m1 == m2 && e1 == e2
+@@ -322,3 +253,0 @@
+-        case .urlElicitationRequired(let message, let elicitations):
+-            hasher.combine(message)
+-            hasher.combine(elicitations)
 --- a/Sources/MCP/Base/Utilities/Progress.swift
 +++ b/Sources/MCP/Base/Utilities/Progress.swift
 @@ -0,0 +1 @@

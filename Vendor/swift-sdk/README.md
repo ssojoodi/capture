@@ -48,3 +48,7 @@ Client capabilities are retained as `[String: Value]`: Capture never calls them 
 `Tools.swift` retains text, image and structured tool results, tool safety annotations, and request/result metadata. Unused audio, embedded-resource and resource-link content models and tool-list-change notifications are omitted. Capture advertises a fixed tools list and never returns those content types. `Server.swift` retains only the advertised tools capability; unused initialization hooks and write-only client state are omitted.
 
 Additional omitted paths are `Server/Resources.swift` and `Base/UnitInterval.swift`. The latter was needed only by the removed sampling/resource models. The source patch records all edits to retained files. Boundary tests verify text/image wire formats, structured results, safety hints and arbitrary request metadata alongside cancellation and initialization.
+
+### Elicitation error removal
+
+`Error.swift` omits URLElicitationInfo and the URL-elicitation-specific error case. Capture never initiates this interaction. Incoming code -32042 falls through to the existing generic server-error decoder; standard JSON-RPC and transport errors are unchanged. Five SDK tests, full protocol/lifecycle checks and Codex discovery passed. The stripped helper measures 908,400 bytes.

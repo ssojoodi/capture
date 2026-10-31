@@ -123,3 +123,7 @@ The initialization simplification passed three SDK boundary tests (including exa
 Additional omitted paths are `Server/Resources.swift` and `Base/UnitInterval.swift`. The latter was needed only by the removed sampling/resource models. The source patch records all edits to retained files. Boundary tests verify text/image wire formats, structured results, safety hints and arbitrary request metadata alongside cancellation and initialization.
 
 This stage passed all four SDK boundary tests, full stripped-helper protocol/lifecycle checks and installed Codex discovery. The stripped arm64 helper measures 927,312 bytes, down from 1,078,576.
+
+### Elicitation error removal
+
+`Error.swift` omits URLElicitationInfo and the URL-elicitation-specific error case. Capture never initiates this interaction. Incoming code -32042 falls through to the existing generic server-error decoder; standard JSON-RPC and transport errors are unchanged. Five SDK tests, full protocol/lifecycle checks and Codex discovery passed. The stripped helper measures 908,400 bytes.

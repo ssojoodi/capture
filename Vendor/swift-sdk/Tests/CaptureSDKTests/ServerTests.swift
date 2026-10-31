@@ -110,3 +110,10 @@ private func waitFor(_ predicate: () async -> Bool) async throws {
     let parameters = try JSONDecoder().decode(CallTool.Parameters.self, from: Data(request.utf8))
     #expect(try JSONDecoder().decode(Value.self, from: JSONEncoder().encode(parameters)) == JSONDecoder().decode(Value.self, from: Data(request.utf8)))
 }
+
+@Test func unusedElicitationErrorDecodesAsGenericServerError() throws {
+    let json = #"{"code":-32042,"message":"External input required","data":{"elicitations":[]}}"#
+    let error = try JSONDecoder().decode(MCPError.self, from: Data(json.utf8))
+    #expect(error == .serverError(code: -32042, message: "External input required"))
+    #expect(error.code == -32042)
+}
