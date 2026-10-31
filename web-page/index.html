@@ -34,7 +34,8 @@
   "url": "https://sojoodi.com/apps/Capture/",
   "description": "Annotate screenshots with arrows, text, shapes, blur, and crop. Copy individual annotations into other apps or export transparent PNGs with Capture for macOS.",
   "image": "https://sojoodi.com/apps/Capture/assets/social-preview-v2.png",
-  "operatingSystem": "macOS",
+  "operatingSystem": "macOS 14 or later",
+  "processorRequirements": "Apple Silicon",
   "applicationCategory": "MultimediaApplication",
   "downloadUrl": "https://sojoodi.com/apps/Capture/Capture.dmg",
   "releaseNotes": "https://sojoodi.com/apps/Capture/release-notes.html"
@@ -235,6 +236,7 @@
         letter-spacing: -0.01em;
       }
 
+      .download-requirements { margin-top: 16px; font-size: 14px; }
       .hero-actions {
         display: flex;
         justify-content: center;
@@ -594,6 +596,7 @@
             >
             <a class="button button-secondary" href="#tools">See the tools</a>
           </div>
+          <p class="download-requirements">Requires Apple Silicon and macOS 14 or later.</p>
           <div class="tool-strip" aria-label="Supported tools">
             <span class="tool-pill">Arrow</span>
             <span class="tool-pill">Text</span>
@@ -752,7 +755,7 @@
         <img src="app-icon.svg" alt="" width="64" height="64" />
         <div>
           <h2>Capture for macOS</h2>
-          <p>A minimal macOS native annotation app.</p>
+          <p>Requires an Apple Silicon Mac running macOS 14 or later.</p>
         </div>
         <a class="button button-primary" href="Capture.dmg" download
           >Download DMG</a

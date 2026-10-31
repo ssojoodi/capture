@@ -70,6 +70,13 @@ Expected goal milestones:
 - Expensive rendering, especially blur, should be cached or applied only when needed.
 - Prefer direct, understandable model changes over broad abstraction.
 
+## MCP SDK Maintenance
+
+- Read [MCP-SDK.md](MCP-SDK.md) before changing the MCP SDK, helper dependencies, or transport compatibility code.
+- Production uses the pinned stdio-only SDK 0.12.1 in `Vendor/swift-sdk`, with its upstream license, provenance and exact source patch. Never depend on ignored `.build` experiments or modify SwiftPM checkout caches as a release strategy.
+- When updating the subset, pin the upstream revision, preserve its license, and record the exact exclusions and small source patch. Review upstream protocol/security changes and prefer an upstream stdio-only product if available.
+- SDK upgrades require MCP protocol/lifecycle and Codex discovery checks against the actual stripped helper, plus a fresh size comparison. Reassess the experimental-capabilities workaround when upstream changes. Update the maintenance document and lockfile together; do not leave a local subset permanently frozen.
+
 ## UX Principles
 
 - Tools should feel immediate.
@@ -79,6 +86,8 @@ Expected goal milestones:
 - If behavior differs from Skitch, document why in the relevant iteration plan.
 
 ## Release Configuration
+
+- Distribution builds target Apple Silicon (`arm64`) only. Optimize Release binaries for size, preserve matching dSYMs outside the app, and strip the isolated candidate before signing.
 
 - Edit `Config/Version.xcconfig` for the date-based app version and integer build number.
 - Do not supply release versions through environment variables or `release.env`.

@@ -18,7 +18,7 @@ Copy Image (Shift-Command-C) writes the full canvas as PNG to the clipboard. Exp
 
 ## Requirements
 
-- macOS 14.0 or newer
+- Apple Silicon Mac running macOS 14.0 or newer
 - Full Xcode app, not only Command Line Tools
 
 ## Project Layout
@@ -126,8 +126,7 @@ Create a signed, notarized, stapled DMG:
 make release
 ```
 
-The final DMG is `web-page/Capture.dmg`. The release driver builds both Apple silicon
-and Intel architectures in a reusable cache, signs the embedded framework before the app,
+The final DMG is `web-page/Capture.dmg`. The release driver builds for Apple Silicon in a reusable cache, strips release symbols before signing the helper, framework, and app,
 notarizes the DMG, and verifies its ticket and Gatekeeper assessment before replacing the
 local download. Failed verification leaves the previous download intact.
 
