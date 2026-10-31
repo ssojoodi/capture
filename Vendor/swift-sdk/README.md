@@ -52,3 +52,7 @@ Additional omitted paths are `Server/Resources.swift` and `Base/UnitInterval.swi
 ### Elicitation error removal
 
 `Error.swift` omits URLElicitationInfo and the URL-elicitation-specific error case. Capture never initiates this interaction. Incoming code -32042 falls through to the existing generic server-error decoder; standard JSON-RPC and transport errors are unchanged. Five SDK tests, full protocol/lifecycle checks and Codex discovery passed. The stripped helper measures 908,400 bytes.
+
+### JSON string preservation
+
+`Value.swift` omits its special binary-data case and automatic data-URL parsing. Capture uses ordinary JSON values and the dedicated image content field; literal data URLs in text arguments now remain unchanged. `Extensions/Data+Extensions.swift` and its RegexBuilder import are omitted. Six SDK boundary tests, full protocol/lifecycle checks and Codex discovery passed. The stripped helper measures 883,504 bytes.

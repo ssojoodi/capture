@@ -1,4 +1,4 @@
-import struct Foundation.Data
+// Modified for Capture: preserve JSON strings verbatim; omit automatic data-URL conversion.
 import class Foundation.JSONDecoder
 import class Foundation.JSONEncoder
 
@@ -9,7 +9,6 @@ public enum Value: Hashable, Sendable {
     case int(Int)
     case double(Double)
     case string(String)
-    case data(mimeType: String? = nil, Data)
     case array([Value])
     case object([String: Value])
 
@@ -58,13 +57,6 @@ public enum Value: Hashable, Sendable {
         return value
     }
 
-    /// Returns the data value and optional MIME type if the value is `data`,
-    /// otherwise returns `nil`.
-    public var dataValue: (mimeType: String?, Data)? {
-        guard case let .data(mimeType: mimeType, data) = self else { return nil }
-        return (mimeType: mimeType, data)
-    }
-
     /// Returns the `[Value]` value if the value is an `array`,
     /// otherwise returns `nil`.
     public var arrayValue: [Value]? {
@@ -95,13 +87,7 @@ extension Value: Codable {
         } else if let value = try? container.decode(Double.self) {
             self = .double(value)
         } else if let value = try? container.decode(String.self) {
-            if Data.isDataURL(string: value),
-                case let (mimeType, data)? = Data.parseDataURL(value)
-            {
-                self = .data(mimeType: mimeType, data)
-            } else {
-                self = .string(value)
-            }
+            self = .string(value)
         } else if let value = try? container.decode([Value].self) {
             self = .array(value)
         } else if let value = try? container.decode([String: Value].self) {
@@ -126,8 +112,6 @@ extension Value: Codable {
             try container.encode(value)
         case .string(let value):
             try container.encode(value)
-        case let .data(mimeType, value):
-            try container.encode(value.dataURLEncoded(mimeType: mimeType))
         case .array(let value):
             try container.encode(value)
         case .object(let value):
@@ -149,8 +133,6 @@ extension Value: CustomStringConvertible {
             return value.description
         case .string(let value):
             return value.description
-        case let .data(mimeType, value):
-            return value.dataURLEncoded(mimeType: mimeType)
         case .array(let value):
             return value.description
         case .object(let value):

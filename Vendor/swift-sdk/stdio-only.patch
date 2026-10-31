@@ -136,6 +136,36 @@
 -        }
 -    }
 -}
+--- a/Sources/MCP/Base/Value.swift
++++ b/Sources/MCP/Base/Value.swift
+@@ -1 +1 @@
+-import struct Foundation.Data
++// Modified for Capture: preserve JSON strings verbatim; omit automatic data-URL conversion.
+@@ -12 +11,0 @@
+-    case data(mimeType: String? = nil, Data)
+@@ -61,7 +59,0 @@
+-    /// Returns the data value and optional MIME type if the value is `data`,
+-    /// otherwise returns `nil`.
+-    public var dataValue: (mimeType: String?, Data)? {
+-        guard case let .data(mimeType: mimeType, data) = self else { return nil }
+-        return (mimeType: mimeType, data)
+-    }
+-
+@@ -98,7 +90 @@
+-            if Data.isDataURL(string: value),
+-                case let (mimeType, data)? = Data.parseDataURL(value)
+-            {
+-                self = .data(mimeType: mimeType, data)
+-            } else {
+-                self = .string(value)
+-            }
++            self = .string(value)
+@@ -129,2 +114,0 @@
+-        case let .data(mimeType, value):
+-            try container.encode(value.dataURLEncoded(mimeType: mimeType))
+@@ -152,2 +135,0 @@
+-        case let .data(mimeType, value):
+-            return value.dataURLEncoded(mimeType: mimeType)
 --- a/Sources/MCP/Client/Client.swift
 +++ b/Sources/MCP/Client/Client.swift
 @@ -1 +1 @@

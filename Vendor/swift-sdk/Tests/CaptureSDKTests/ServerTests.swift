@@ -117,3 +117,12 @@ private func waitFor(_ predicate: () async -> Bool) async throws {
     #expect(error == .serverError(code: -32042, message: "External input required"))
     #expect(error.code == -32042)
 }
+
+@Test func dataURLTextIsPreservedVerbatim() throws {
+    for text in ["data:,hello%20world", "data:text/plain;charset=UTF-8;base64,aGVsbG8=", "data:image/png;base64,cG5n", "data:invalid"] {
+        let encoded = try JSONEncoder().encode(text)
+        let value = try JSONDecoder().decode(Value.self, from: encoded)
+        #expect(value == .string(text))
+        #expect(try JSONDecoder().decode(String.self, from: JSONEncoder().encode(value)) == text)
+    }
+}

@@ -9,7 +9,7 @@ Capture uses the pinned stdio-only SDK in `Vendor/swift-sdk` as its production d
 - Upstream: `https://github.com/modelcontextprotocol/swift-sdk.git`
 - Tested version: `0.12.1`
 - Tested revision: `a0ae212ebf6eab5f754c3129608bc5557637e605`
-- Retained MCP source: 16 Swift files; exact counts vary with the recorded patch.
+- Retained MCP source: 15 Swift files; exact counts vary with the recorded patch.
 - Required dependencies: `swift-log` and `swift-system`.
 - EventSource is unnecessary for the subset. NIO is not linked into Capture's existing helper; its appearance in dependency resolution does not imply shipped code.
 
@@ -127,3 +127,7 @@ This stage passed all four SDK boundary tests, full stripped-helper protocol/lif
 ### Elicitation error removal
 
 `Error.swift` omits URLElicitationInfo and the URL-elicitation-specific error case. Capture never initiates this interaction. Incoming code -32042 falls through to the existing generic server-error decoder; standard JSON-RPC and transport errors are unchanged. Five SDK tests, full protocol/lifecycle checks and Codex discovery passed. The stripped helper measures 908,400 bytes.
+
+### JSON string preservation
+
+`Value.swift` omits its special binary-data case and automatic data-URL parsing. Capture uses ordinary JSON values and the dedicated image content field; literal data URLs in text arguments now remain unchanged. `Extensions/Data+Extensions.swift` and its RegexBuilder import are omitted. Six SDK boundary tests, full protocol/lifecycle checks and Codex discovery passed. The stripped helper measures 883,504 bytes.
