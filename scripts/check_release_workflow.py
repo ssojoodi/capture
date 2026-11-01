@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory() as temporary:
             return f'"{identity}"'
         if args[:2] == ('xcrun', 'xcodebuild'):
             assert args[args.index('-derivedDataPath') + 1] == str(repo / '.build/release/DerivedData')
-            assert 'ONLY_ACTIVE_ARCH=NO' in args
+            assert 'ONLY_ACTIVE_ARCH=NO' in args and 'ARCHS=arm64' in args
             assert not any(arg.startswith(('MARKETING_VERSION=', 'CURRENT_PROJECT_VERSION=')) for arg in args)
         elif args[0] == 'ditto' and args[2].endswith('.app'):
             app = Path(args[2])
@@ -65,8 +65,13 @@ with tempfile.TemporaryDirectory() as temporary:
              patch('subprocess.run', side_effect=metadata):
             main()
             assert len(submissions) == 1
-            for symbols in ('Capture.app.dSYM', 'CaptureCore.framework.dSYM'):
+            for symbols in ('Capture.app.dSYM', 'CaptureCore.framework.dSYM', 'capture-mcp.dSYM'):
                 assert any(call[0] == 'ditto' and call[2].endswith('/symbols/' + symbols) for call in calls)
+            strips = [call for call in calls if call[:2] == ('xcrun', 'strip')]
+            assert len(strips) == 3
+            first_sign = next(i for i, call in enumerate(calls) if call[:2] == ('codesign', '--force'))
+            assert all(calls.index(call) < first_sign and '/run-' in call[-1] for call in strips)
+            assert max(i for i, call in enumerate(calls) if call[0] == 'ditto' and '/symbols/' in call[-1]) < min(calls.index(call) for call in strips)
             signed = [call[-1] for call in calls if call[:2] == ('codesign', '--force')]
             assert signed[0].endswith('/Contents/Helpers/capture-mcp')
             assert signed[1].endswith('/Contents/Frameworks/CaptureCore.framework')
@@ -79,7 +84,7 @@ with tempfile.TemporaryDirectory() as temporary:
             assert any(call[0] == 'bash' and call[1] == 'scripts/create_dmg.sh' and call[3].endswith('Capture-2026.10.3-2.dmg') for call in calls)
             assert not any(call[0] == 'open' for call in calls)
             # Failed notarization or final validation must not replace the download.
-            for failure in [('codesign', '--force'), ('notarize',), ('xcrun', 'stapler', 'validate'), ('spctl',), ('hdiutil', 'verify')]:
+            for failure in [('xcrun', 'strip'), ('codesign', '--force'), ('notarize',), ('xcrun', 'stapler', 'validate'), ('spctl',), ('hdiutil', 'verify')]:
                 try:
                     main()
                 except (RuntimeError, subprocess.CalledProcessError):

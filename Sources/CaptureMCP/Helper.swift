@@ -91,16 +91,16 @@ struct CaptureMCP {
                     var result = try await connection.call(method: params.name, arguments: arguments)
                     let png = result.removeValue(forKey: "imagePNG") as? String
                     let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
-                    var content: [Tool.Content] = [.text(text: String(decoding: data, as: UTF8.self), annotations: nil, _meta: nil)]
-                    if let png { content.append(.image(data: png, mimeType: "image/png", annotations: nil, _meta: nil)) }
+                    var content: [Tool.Content] = [.text(text: String(decoding: data, as: UTF8.self), _meta: nil)]
+                    if let png { content.append(.image(data: png, mimeType: "image/png", _meta: nil)) }
                     return try .init(content: content, structuredContent: try JSONDecoder().decode(Value.self, from: data), isError: result["error"] != nil)
                 } catch {
                     let error = (error as? AgentError) ?? AgentError("operation_failed", error.localizedDescription)
                     let text = String(decoding: try JSONSerialization.data(withJSONObject: error.response), as: UTF8.self)
-                    return .init(content: [.text(text: text, annotations: nil, _meta: nil)], isError: true)
+                    return .init(content: [.text(text: text, _meta: nil)], isError: true)
                 }
             }
-            try await server.start(transport: CompatibleStdioTransport())
+            try await server.start(transport: StdioTransport())
             await server.waitUntilCompleted()
         } catch {
             FileHandle.standardError.write(Data(("Capture MCP: " + error.localizedDescription + "\n").utf8))

@@ -81,7 +81,8 @@ with tempfile.TemporaryDirectory(prefix='capture-mcp-check-') as tmp:
             wait_for(lambda: (target / 'ack').exists())
 
         client = Client({'experimental': {'codex/sandbox-state-meta': {}, 'test/nested': {'enabled': True, 'values': [1, None]}},
-                         'roots': {'listChanged': True}})
+                         'roots': {'listChanged': True}, 'sampling': {'tools': {}, 'context': {}},
+                         'elicitation': {'form': {}, 'url': {}}})
         assert client.rpc('ping', {}) == {}
         names = {t['name'] for t in client.rpc('tools/list', {})['tools']}
         assert len(names) == 13 and {'blur_region', 'preview_document', 'copy_image'} <= names

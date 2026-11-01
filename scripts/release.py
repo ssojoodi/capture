@@ -93,13 +93,13 @@ def main():
     run('make', 'assets')
     run('xcrun', 'xcodebuild', '-project', 'Capture.xcodeproj', '-scheme', 'Capture',
         '-configuration', 'Release', '-destination', 'generic/platform=macOS', '-derivedDataPath', derived,
-        'CODE_SIGNING_ALLOWED=NO', 'ONLY_ACTIVE_ARCH=NO', 'build')
+        'CODE_SIGNING_ALLOWED=NO', 'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=NO', 'build')
     # Keep the reusable build cache unsigned; sign an isolated copy for this run.
     app = staging / 'Capture.app'
     run('ditto', derived / 'Build/Products/Release/Capture.app', app)
     run('bash', 'scripts/verify_release.sh', app)
     # Preserve matching symbols per release, outside the app and DMG.
-    for symbols in ('Capture.app.dSYM', 'CaptureCore.framework.dSYM'):
+    for symbols in ('Capture.app.dSYM', 'CaptureCore.framework.dSYM', 'capture-mcp.dSYM'):
         run('ditto', derived / 'Build/Products/Release' / symbols, staging / 'symbols' / symbols)
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     version = info['CFBundleShortVersionString']
@@ -111,6 +111,9 @@ def main():
         raise RuntimeError('Built app version/build must match Config/Version.xcconfig.')
     core = app / 'Contents/Frameworks/CaptureCore.framework'
     helper = app / 'Contents/Helpers/capture-mcp'
+    # Strip only the isolated candidate, after preserving symbols and before signing.
+    for binary in (helper, core / 'Versions/A/CaptureCore', app / 'Contents/MacOS/Capture'):
+        run('xcrun', 'strip', '-S', '-x', binary)
     for code in (helper, core, app):
         run('codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', args.identity, code)
     run('codesign', '--verify', '--deep', '--strict', '--verbose=2', app)

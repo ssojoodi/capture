@@ -103,3 +103,7 @@ python3 scripts/check_codex_mcp.py .build/DerivedData/Build/Products/Debug/Captu
 This starts an isolated, ephemeral Codex thread and checks its MCP runtime status without making a model call or changing your Codex configuration. It tests runtime initialization, not just standalone tool discovery: Codex sends additional capabilities when a thread starts.
 
 The helper ignores unused experimental client capabilities during initialization because Swift MCP SDK 0.12.1 restricts that field to string values. Object-valued capabilities are valid MCP data and otherwise cause a decoding error. Standard capabilities and tool messages pass through unchanged. Remove the compatibility adapter when the SDK supports arbitrary JSON values in this field.
+
+## SDK maintenance
+
+See [MCP-SDK.md](MCP-SDK.md) for the tested stdio-only subset, its adoption status, and the upstream update and validation procedure.
