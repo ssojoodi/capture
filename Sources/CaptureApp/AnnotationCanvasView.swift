@@ -22,6 +22,13 @@ final class AnnotationCanvasView: NSView {
 
     private let state: AnnotationDocumentState
     private let toolDefaults: UserDefaults
+    private var magnifierCommand = false
+    private var drawingMagnifier = false
+    func updateMagnifierModifiers(_ flags: NSEvent.ModifierFlags) {
+        magnifierCommand = flags.contains(.command)
+        needsDisplay = true
+    }
+
     private var zoom: CGFloat = 1
     private(set) var imageOrigin: CGPoint = .zero
     private var hasPanned = false
@@ -184,6 +191,11 @@ final class AnnotationCanvasView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        drawCanvasContent(dirtyRect)
+        if let context = NSGraphicsContext.current?.cgContext { drawResizeMagnifier(in: context) }
+    }
+
+    private func drawCanvasContent(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         NSColor(calibratedRed: 0.965, green: 0.96, blue: 0.945, alpha: 1).setFill()
         dirtyRect.fill()
@@ -237,7 +249,7 @@ final class AnnotationCanvasView: NSView {
             activeAnnotation.draw(in: context, baseImage: baseCGImage, imageSize: state.imageSize, scale: zoom)
         }
 
-        if let selected = state.annotation(with: state.selectedAnnotationID) {
+        if !drawingMagnifier, let selected = state.annotation(with: state.selectedAnnotationID) {
             drawSelection(for: selected, in: context)
         }
 
@@ -253,6 +265,46 @@ final class AnnotationCanvasView: NSView {
         }
         if let crop = visibleCrop {
             drawCrop(crop, in: context)
+        }
+        context.restoreGState()
+    }
+
+    private func drawResizeMagnifier(in context: CGContext) {
+        guard !drawingMagnifier, magnifierCommand, window?.isKeyWindow == true,
+              case let .resizing(annotation, handle, _) = interaction,
+              let center = AnnotationSelectionGeometry.handleCenters(for: annotation).first(where: { $0.0 == handle })?.1 else { return }
+        let point = CGPoint(x: imageOrigin.x + center.x * zoom, y: imageOrigin.y + center.y * zoom)
+        let size: CGFloat = 160
+        var x = point.x + 28
+        var y = point.y + 28
+        if x + size > bounds.maxX { x = point.x - size - 28 }
+        if y + size > bounds.maxY { y = point.y - size - 28 }
+        let rect = CGRect(x: max(bounds.minX + 8, min(x, bounds.maxX - size - 8)),
+                          y: max(bounds.minY + 8, min(y, bounds.maxY - size - 8)), width: size, height: size)
+        let stored = toolDefaults.integer(forKey: "Capture.resizeMagnification")
+        let factor = CGFloat([4, 6, 8, 12, 16].contains(stored) ? stored : 4)
+        context.saveGState()
+        context.addEllipse(in: rect)
+        context.clip()
+        context.translateBy(x: rect.midX, y: rect.midY)
+        context.scaleBy(x: factor, y: factor)
+        context.translateBy(x: -point.x, y: -point.y)
+        drawingMagnifier = true
+        drawCanvasContent(bounds)
+        drawingMagnifier = false
+        context.restoreGState()
+        context.saveGState()
+        context.setStrokeColor(NSColor.labelColor.cgColor)
+        context.setLineWidth(2)
+        context.strokeEllipse(in: rect)
+        for (color, width) in [(NSColor.white, CGFloat(3)), (NSColor.black, CGFloat(1))] {
+            context.setStrokeColor(color.cgColor)
+            context.setLineWidth(width)
+            context.move(to: CGPoint(x: rect.midX - 8, y: rect.midY))
+            context.addLine(to: CGPoint(x: rect.midX + 8, y: rect.midY))
+            context.move(to: CGPoint(x: rect.midX, y: rect.midY - 8))
+            context.addLine(to: CGPoint(x: rect.midX, y: rect.midY + 8))
+            context.strokePath()
         }
         context.restoreGState()
     }
@@ -356,6 +408,7 @@ final class AnnotationCanvasView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        updateMagnifierModifiers(event.modifierFlags)
         if isSpacePanEnabled, state.selectedTool == .select, state.hasImage {
             window?.makeFirstResponder(self)
             interaction = .panning(lastPoint: convert(event.locationInWindow, from: nil))

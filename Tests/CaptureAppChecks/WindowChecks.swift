@@ -405,12 +405,29 @@ enum WindowChecks {
         state.load(image: image)
         canvas.zoomToFit()
         precondition(control.selectedSegment == 2, "New windows start at M")
+        let sizeItem = window.toolbar!.items.first { $0.itemIdentifier.rawValue == "thickness" }!
+        let sizeMenu = sizeItem.menuFormRepresentation!.submenu!
+        precondition(sizeMenu.items.map(\.title) == AnnotationCanvasView.SizePreset.allCases.map(\.label))
+        func checkSizeMenu() {
+            sizeMenu.update()
+            for item in sizeMenu.items {
+                precondition(item.isEnabled == control.isEnabled)
+                precondition((item.state == .on) == (control.selectedSegment == item.tag))
+            }
+        }
+        checkSizeMenu()
         func selectTool(_ tool: Tool) {
             controller.selectTool(NSToolbarItem(itemIdentifier: .init(tool.rawValue)))
         }
         func choose(_ index: Int) {
-            control.selectedSegment = index
-            controller.selectThickness(control)
+            if index.isMultiple(of: 2) {
+                sizeMenu.performActionForItem(at: index)
+            } else {
+                control.selectedSegment = index
+                controller.selectThickness(control)
+            }
+            precondition(control.selectedSegment == index, "Overflow and toolbar must apply the same preset")
+            checkSizeMenu()
         }
         func draw(_ tool: Tool, activateTool: Bool = true) -> Annotation {
             if activateTool { selectTool(tool) }
@@ -476,6 +493,7 @@ enum WindowChecks {
         let custom = RectangleAnnotation(bounds: CGRect(x: 50, y: 50, width: 90, height: 90), strokeWidth: 9)
         state.addAnnotation(custom)
         precondition(control.selectedSegment == -1, "Custom sizes must not show an incorrect preset")
+        checkSizeMenu()
         selectTool(.text)
         precondition(state.selectedAnnotationID == nil)
         choose(4)
@@ -484,6 +502,9 @@ enum WindowChecks {
         for tool in [Tool.blur, .crop] {
             selectTool(tool)
             precondition(!control.isEnabled && control.selectedSegment == -1)
+            checkSizeMenu()
+            controller.selectThickness(sizeMenu.items[0])
+            precondition(control.selectedSegment == -1, "Disabled overflow actions must not change size")
         }
         selectTool(.arrow)
         precondition(control.isEnabled && control.selectedSegment == 4)

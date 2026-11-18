@@ -9,4 +9,4 @@ release.env
 Config/LocalSigning.xcconfig
 
 docs/
-artifacts/verification/
+/artifacts/
