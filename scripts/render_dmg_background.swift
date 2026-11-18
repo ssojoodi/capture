@@ -73,7 +73,7 @@ guard arguments.count == 2 else {
 }
 
 let outputURL = URL(fileURLWithPath: arguments[1])
-let size = CGSize(width: 660, height: 400)
+let size = CGSize(width: 700, height: 560)
 let image = NSImage(size: size)
 
 image.lockFocus()
@@ -83,6 +83,10 @@ NSGradient(
     starting: NSColor(calibratedRed: 0.99, green: 0.995, blue: 1, alpha: 1),
     ending: NSColor(calibratedRed: 0.87, green: 0.965, blue: 1, alpha: 1)
 )?.draw(in: bounds, angle: -35)
+
+let artworkTransform = NSAffineTransform()
+artworkTransform.translateX(by: 20, yBy: 160)
+artworkTransform.concat()
 
 roundedRect(
     CGRect(x: 26, y: 26, width: 608, height: 348),
@@ -113,20 +117,6 @@ roundedRect(CGRect(x: 90, y: 92, width: 158, height: 158), radius: 34, fill: pan
 roundedRect(CGRect(x: 412, y: 92, width: 158, height: 158), radius: 34, fill: panelFill, stroke: panelStroke, lineWidth: 2)
 
 drawArrow(in: CGRect(x: 291, y: 146, width: 84, height: 50))
-
-drawText(
-    "Capture.app",
-    in: CGRect(x: 70, y: 62, width: 198, height: 22),
-    font: NSFont.systemFont(ofSize: 13, weight: .medium),
-    color: NSColor(calibratedRed: 0.027, green: 0.349, blue: 0.522, alpha: 1)
-)
-
-drawText(
-    "Applications",
-    in: CGRect(x: 392, y: 62, width: 198, height: 22),
-    font: NSFont.systemFont(ofSize: 13, weight: .medium),
-    color: NSColor(calibratedRed: 0.027, green: 0.349, blue: 0.522, alpha: 1)
-)
 
 image.unlockFocus()
 

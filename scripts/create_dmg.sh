@@ -79,20 +79,22 @@ on run argv
       set current view of container window to icon view
       set toolbar visible of container window to false
       set statusbar visible of container window to false
-      set bounds of container window to {100, 100, 760, 500}
+      set pathbar visible of container window to false
+      set bounds of container window to {100, 100, 800, 692}
 
       set viewOptions to icon view options of container window
       set arrangement of viewOptions to not arranged
       set icon size of viewOptions to 104
+      set text size of viewOptions to 13
       set background picture of viewOptions to file ".background:background.png"
 
-      set position of item appName of container window to {169, 230}
-      set position of item "Applications" of container window to {491, 230}
+      set position of item appName of container window to {189, 230}
+      set position of item "Applications" of container window to {511, 230}
       try
-        set position of item ".background" of container window to {1200, 1200}
+        set position of item ".background" of container window to {580, 480}
       end try
       try
-        set position of item ".fseventsd" of container window to {1200, 1200}
+        set position of item ".fseventsd" of container window to {120, 480}
       end try
 
       update without registering applications
