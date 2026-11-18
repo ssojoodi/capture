@@ -14,6 +14,7 @@ enum AppMenu {
 
         let appMenu = NSMenu(title: appName)
         appMenu.addItem(withTitle: "About \(appName)", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Settings…", action: #selector(AppDelegate.showSettings(_:)), keyEquivalent: ",")
         appMenu.addItem(withTitle: "Check for Updates…", action: #selector(AppDelegate.checkForUpdates(_:)), keyEquivalent: "")
         appMenu.addItem(withTitle: "Automatically Check for Updates", action: #selector(AppDelegate.toggleAutomaticChecks(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())

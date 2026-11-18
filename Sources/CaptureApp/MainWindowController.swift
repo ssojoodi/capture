@@ -156,6 +156,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             guard let self, let window = self.window else { return event }
             if event.type == .flagsChanged {
                 self.updateShortcutHints(event.modifierFlags)
+                if window.isKeyWindow { self.canvasView.updateMagnifierModifiers(event.modifierFlags) }
                 return event
             }
             guard event.window === window, window.isKeyWindow,
@@ -175,7 +176,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                     return nil
                 }
                 let key = event.charactersIgnoringModifiers?.lowercased()
-                let fileCommand = shortcutModifiers == .command && ["n", "o", "s", "w", "q"].contains(key ?? "")
+                let fileCommand = shortcutModifiers == .command && ["n", "o", "s", "w", "q", ","].contains(key ?? "")
                     || shortcutModifiers == [.command, .shift] && key == "s"
                 if fileCommand {
                     self.canvasView.commitTextEditing()
@@ -472,6 +473,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         item.view = control
         item.minSize = NSSize(width: 142, height: 28)
         item.maxSize = NSSize(width: 152, height: 28)
+        let overflowItem = NSMenuItem(title: item.label, action: nil, keyEquivalent: "")
+        let menu = NSMenu(title: item.label)
+        for preset in AnnotationCanvasView.SizePreset.allCases {
+            let choice = menu.addItem(withTitle: preset.label, action: #selector(selectThickness(_:)), keyEquivalent: "")
+            choice.target = self
+            choice.tag = preset.rawValue
+        }
+        overflowItem.submenu = menu
+        item.menuFormRepresentation = overflowItem
         return item
     }
 
@@ -520,8 +530,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         sizeControl?.selectedSegment = canvasView.canChangeSize ? (canvasView.selectedSizePreset?.rawValue ?? -1) : -1
     }
 
-    @objc func selectThickness(_ sender: NSSegmentedControl) {
-        guard let preset = AnnotationCanvasView.SizePreset(rawValue: sender.selectedSegment) else { return }
+    @objc func selectThickness(_ sender: Any) {
+        let index = (sender as? NSSegmentedControl)?.selectedSegment ?? (sender as? NSMenuItem)?.tag
+        guard canvasView.canChangeSize, let index,
+              let preset = AnnotationCanvasView.SizePreset(rawValue: index) else { return }
         canvasView.applySelectedSize(preset)
         updateSizeControl()
     }
@@ -691,6 +703,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(selectThickness(_:)) {
+            menuItem.state = canvasView.canChangeSize && canvasView.selectedSizePreset?.rawValue == menuItem.tag ? .on : .off
+            return canvasView.canChangeSize
+        }
         if menuItem.action == #selector(shareImage(_:)) {
             return state.hasImage && shareSession == nil
         }
@@ -732,6 +748,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func windowDidResignKey(_ notification: Notification) {
+        canvasView.updateMagnifierModifiers([])
         canvasView.setSpacePanEnabled(false)
         updateShortcutHints([])
     }

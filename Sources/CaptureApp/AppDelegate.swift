@@ -5,6 +5,33 @@ import CaptureAutomation
 #endif
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+    private var settingsWindow: NSWindow?
+    @objc func showSettings(_ sender: Any?) {
+        if let settingsWindow { settingsWindow.makeKeyAndOrderFront(nil); return }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 390, height: 130), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.title = "Settings"
+        window.isReleasedWhenClosed = false
+        let label = NSTextField(labelWithString: "Resize magnification")
+        label.frame = NSRect(x: 24, y: 80, width: 190, height: 24)
+        let popup = NSPopUpButton(frame: NSRect(x: 230, y: 76, width: 130, height: 28))
+        for value in [4, 6, 8, 12, 16] {
+            popup.addItem(withTitle: value == 4 ? "4× (default)" : "\(value)×")
+            popup.lastItem?.tag = value
+        }
+        let stored = UserDefaults.standard.integer(forKey: "Capture.resizeMagnification")
+        popup.selectItem(withTag: [4, 6, 8, 12, 16].contains(stored) ? stored : 4)
+        popup.target = self
+        popup.action = #selector(changeMagnification(_:))
+        let hint = NSTextField(wrappingLabelWithString: "Hold Command while resizing to magnify the handle.")
+        hint.frame = NSRect(x: 24, y: 22, width: 340, height: 40)
+        for view in [label, popup, hint] { window.contentView?.addSubview(view) }
+        settingsWindow = window
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+    }
+    @objc private func changeMagnification(_ sender: NSPopUpButton) {
+        UserDefaults.standard.set(sender.selectedTag(), forKey: "Capture.resizeMagnification")
+    }
     private let updates = UpdateController()
     private let agentServer: AgentServer
     private let agentDefaults: UserDefaults

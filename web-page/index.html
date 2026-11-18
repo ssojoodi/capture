@@ -388,6 +388,19 @@
         font-size: 15px;
       }
 
+      .agent-control .section-head { max-width: 760px; }
+      .agent-steps { margin: 0; padding: 0; list-style: none; }
+      .agent-steps .step { min-width: 0; }
+      .agent-tools { margin-top: 28px; padding: 22px 25px; border: 1px solid var(--line); border-radius: 20px; background: white; }
+      .agent-tools summary { width: fit-content; color: var(--blue-deep); font-weight: 700; cursor: pointer; padding: 6px 0; }
+      .agent-tools summary:focus-visible { outline: 3px solid var(--blue-deep); outline-offset: 4px; border-radius: 3px; }
+      .agent-tool-list { display: flex; flex-wrap: wrap; gap: 10px; padding: 0; margin: 20px 0 0; list-style: none; }
+      .agent-tool-list li { max-width: 100%; padding: 6px 10px; border-radius: 6px; background: var(--wash); }
+      .agent-tool-list code { font-family: var(--mono); font-size: 14px; overflow-wrap: anywhere; }
+      .agent-privacy { margin-top: 28px; padding: 24px; border-left: 3px solid var(--blue-deep); background: var(--wash); border-radius: 0 16px 16px 0; }
+      .agent-privacy h3 { font-size: 19px; color: var(--ink); }
+      .agent-privacy p { margin-top: 8px; color: var(--muted); font-size: 16px; }
+
       .workflow {
         border-top: 1px solid var(--line);
         border-bottom: 1px solid var(--line);
@@ -564,6 +577,7 @@
         <nav class="nav-links" aria-label="Primary navigation">
           <a href="#tools">Tools</a>
           <a href="#workflow">Workflow</a>
+          <a href="#agent-control">Agent control</a>
           <a href="release-notes.html">Release notes</a>
           <a class="button button-primary" href="Capture.dmg" download
             >Download</a
@@ -714,6 +728,57 @@
             </p>
           </article>
         </div>
+      </section>
+
+      <section class="wrap section agent-control" id="agent-control" aria-labelledby="agent-control-title">
+        <div class="section-head center">
+          <p class="eyebrow">Optional agent control</p>
+          <h2 id="agent-control-title">Agent control (MCP)</h2>
+          <p>Connect a coding agent through a local MCP connection. The agent can blur, crop, annotate, and copy images. Review its edits in the same Mac window and undo changes to the image.</p>
+          <p>Agent control is off by default. Turn on <strong>Allow Agent Control</strong> from the Capture menu when you want it. Connecting your MCP client does not launch Capture; the first valid tool call does.</p>
+        </div>
+
+        <ol class="steps agent-steps" role="list" aria-label="Set up agent control">
+          <li class="step">
+            <span class="num" aria-hidden="true">1</span>
+            <h3>Allow Agent Control</h3>
+            <p>Capture menu → Allow Agent Control</p>
+          </li>
+          <li class="step">
+            <span class="num" aria-hidden="true">2</span>
+            <h3>Copy MCP Configuration</h3>
+            <p>Capture menu → Copy MCP Configuration</p>
+          </li>
+          <li class="step">
+            <span class="num" aria-hidden="true">3</span>
+            <h3>Connect your MCP client</h3>
+            <p>Add Capture to Claude Code, Codex, or another local MCP client. Use the copied configuration’s command with your client’s configuration format.</p>
+          </li>
+        </ol>
+
+        <details class="agent-tools">
+          <summary>Explore the 13 MCP tools</summary>
+          <ul class="agent-tool-list" role="list" aria-label="Available MCP tools">
+            <li><code>list_documents</code></li>
+            <li><code>open_image</code></li>
+            <li><code>inspect_document</code></li>
+            <li><code>preview_document</code></li>
+            <li><code>add_annotation</code></li>
+            <li><code>update_annotation</code></li>
+            <li><code>delete_annotation</code></li>
+            <li><code>blur_region</code></li>
+            <li><code>crop_document</code></li>
+            <li><code>undo</code></li>
+            <li><code>redo</code></li>
+            <li><code>export_image</code></li>
+            <li><code>copy_image</code></li>
+          </ul>
+        </details>
+
+        <aside class="agent-privacy" aria-labelledby="agent-privacy-title">
+          <h3 id="agent-privacy-title">Blur sensitive information before sharing with a model</h3>
+          <p>If an agent finds a secret by looking at a screenshot, the model has already seen those pixels. Blurring them afterward does not undo that disclosure. Use agent tools to prepare images for issues, docs, and posts; blur sensitive information by hand before sending a screenshot to a model.</p>
+        </aside>
       </section>
 
       <section class="section workflow" id="workflow">
